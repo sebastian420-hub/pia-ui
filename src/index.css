@@ -1,0 +1,29 @@
+@import "tailwindcss";
+
+@theme {
+  --color-sentinel-blue: #0066ff;
+  --color-sentinel-bg: #050505;
+  --color-sentinel-critical: #ef4444;
+  --color-sentinel-high: #f97316;
+  --color-sentinel-normal: #eab308;
+  --font-mono: "JetBrains Mono", "Roboto Mono", monospace;
+}
+
+html, body, #root {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background-color: #000;
+}
+
+.cesium-viewer {
+  width: 100vw;
+  height: 100vh;
+}
+
+/* Hide Cesium Ion Watermark/Credits */
+.cesium-viewer-bottom {
+  display: none !important;
+}

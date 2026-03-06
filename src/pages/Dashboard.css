@@ -1,0 +1,14 @@
+html, body, #root {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background-color: #000;
+}
+
+/* Ensure the Resium viewer takes the full screen */
+.cesium-viewer {
+  width: 100vw;
+  height: 100vh;
+}
