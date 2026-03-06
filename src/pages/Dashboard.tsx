@@ -13,6 +13,7 @@ import './Dashboard.css';
 
 function Dashboard() {
   const [events, setEvents] = useState<IntelligenceEvent[]>([]);
+  const [strategicEntities, setStrategicEntities] = useState<IntelligenceEvent[]>([]);
   const [activeGraphEntity, setActiveGraphEntity] = useState<string | null>(null);
   const [activeDomains, setActiveDomains] = useState<string[]>(['MILITARY', 'POLITICAL', 'NATURAL', 'CYBER', 'FINANCE', 'UNKNOWN']);
   const [activeDossierEvent, setActiveDossierEvent] = useState<IntelligenceEvent | null>(null);
@@ -21,6 +22,16 @@ function Dashboard() {
   const viewerRef = useRef<any>(null);
 
   useEffect(() => {
+    // 0. Fetch Strategic Knowledge Underlay
+    fetch('http://localhost:8001/api/v1/entities/strategic')
+      .then(res => res.json())
+      .then(data => {
+        if (data.status === 'success' && data.data) {
+          setStrategicEntities(data.data);
+        }
+      })
+      .catch(err => console.error("Failed to fetch strategic entities:", err));
+
     // 1. Fetch existing clusters on load
     fetch('http://localhost:8001/api/v1/clusters/active')
       .then(res => res.json())
@@ -147,6 +158,36 @@ function Dashboard() {
           </EntityDescription>
         </Entity>
 
+        {/* Knowledge Underlay Layer (Muted) */}
+        {strategicEntities.map((entity) => {
+          if (!entity.geo) return null;
+          const position = Cartesian3.fromDegrees(entity.geo.lon, entity.geo.lat, 1000);
+          
+          return (
+            <Entity
+              key={`strategic-${entity.uid}`}
+              name={entity.headline}
+              position={position}
+            >
+              <PointGraphics 
+                pixelSize={10} 
+                color={Color.fromCssColorString('rgba(0, 102, 255, 0.4)')}
+                outlineColor={Color.fromCssColorString('rgba(255, 255, 255, 0.1)')}
+                outlineWidth={1}
+              />
+              <EntityDescription>
+                <div>
+                  <p className="text-white/50 text-xs tracking-widest mb-2 border-b border-white/10">KNOWLEDGE UNDERLAY</p>
+                  <p><strong>Entity:</strong> {entity.headline}</p>
+                  <p><strong>Type:</strong> {entity.domain}</p>
+                  <p className="mt-2 text-xs italic">Permanently tracked strategic entity.</p>
+                </div>
+              </EntityDescription>
+            </Entity>
+          );
+        })}
+
+        {/* Live Intelligence Layer (Bright) */}
         {filteredEvents.map((event) => {
           if (!event.geo) return null;
           const position = Cartesian3.fromDegrees(event.geo.lon, event.geo.lat, 10000);
