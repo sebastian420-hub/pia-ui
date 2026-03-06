@@ -7,6 +7,7 @@ import RelationalWeb from '../components/hud/RelationalWeb';
 import FilterBar from '../components/hud/FilterBar';
 import EntityDossier from '../components/hud/EntityDossier';
 import TerminalLog from '../components/hud/TerminalLog';
+import AICopilot from '../components/hud/AICopilot';
 import { Network } from 'lucide-react';
 import './Dashboard.css';
 
@@ -170,6 +171,38 @@ function Dashboard() {
       {/* HUD Layer: Top Filter Bar */}
       <FilterBar activeDomains={activeDomains} onToggleDomain={toggleDomain} />
 
+      {/* HUD Layer: Top Right Controls (Search & Archive) */}
+      <div className="absolute top-4 right-4 z-20 flex gap-2">
+        <form 
+          onSubmit={(e) => {
+            e.preventDefault();
+            const form = e.target as HTMLFormElement;
+            const input = form.elements.namedItem('entitySearch') as HTMLInputElement;
+            if (input.value.trim()) {
+              setActiveGraphEntity(input.value.trim());
+              input.value = '';
+            }
+          }}
+          className="relative"
+        >
+          <input 
+            name="entitySearch"
+            type="text" 
+            placeholder="Search Graph Entity..." 
+            className="bg-black/80 backdrop-blur border border-sentinel-blue/50 text-white px-4 py-2 pr-10 rounded font-mono text-sm focus:outline-none focus:border-sentinel-blue transition-colors shadow-[0_0_15px_rgba(0,102,255,0.2)]"
+          />
+          <button type="submit" className="absolute right-3 top-1/2 -translate-y-1/2 text-sentinel-blue hover:text-white">
+            <Network size={16} />
+          </button>
+        </form>
+        <button 
+          onClick={() => window.location.href = '/archive'}
+          className="bg-black/80 backdrop-blur border border-white/20 text-white px-4 py-2 rounded font-mono text-sm hover:bg-white/10 transition-colors"
+        >
+          ARCHIVE
+        </button>
+      </div>
+
       {/* HUD Layer: Left Sidebar Ticker */}
       <LiveTicker events={filteredEvents} onEventClick={handleEventClick} />
       
@@ -187,6 +220,9 @@ function Dashboard() {
           onClose={() => setActiveGraphEntity(null)} 
         />
       )}
+
+      {/* HUD Layer: AI Co-Pilot Chat */}
+      <AICopilot />
 
       {/* HUD Layer: Bottom Terminal Log */}
       <TerminalLog />
