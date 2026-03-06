@@ -4,12 +4,18 @@ import { Cartesian3, Color } from 'cesium';
 import LiveTicker from '../components/hud/LiveTicker';
 import type { IntelligenceEvent } from '../components/hud/LiveTicker';
 import RelationalWeb from '../components/hud/RelationalWeb';
+import FilterBar from '../components/hud/FilterBar';
+import EntityDossier from '../components/hud/EntityDossier';
+import TerminalLog from '../components/hud/TerminalLog';
 import { Network } from 'lucide-react';
 import './Dashboard.css';
 
 function Dashboard() {
   const [events, setEvents] = useState<IntelligenceEvent[]>([]);
   const [activeGraphEntity, setActiveGraphEntity] = useState<string | null>(null);
+  const [activeDomains, setActiveDomains] = useState<string[]>(['MILITARY', 'POLITICAL', 'NATURAL', 'CYBER', 'FINANCE', 'UNKNOWN']);
+  const [activeDossierEvent, setActiveDossierEvent] = useState<IntelligenceEvent | null>(null);
+  
   const wsRef = useRef<WebSocket | null>(null);
   const viewerRef = useRef<any>(null);
 
@@ -89,6 +95,7 @@ function Dashboard() {
   };
 
   const handleEventClick = useCallback((event: IntelligenceEvent) => {
+    // 1. Fly camera
     if (event.geo && viewerRef.current && viewerRef.current.cesiumElement) {
       const viewer = viewerRef.current.cesiumElement;
       viewer.camera.flyTo({
@@ -96,7 +103,20 @@ function Dashboard() {
         duration: 2.0 // 2 second flight
       });
     }
+    // 2. Open Dossier
+    setActiveDossierEvent(event);
   }, []);
+
+  const toggleDomain = (domain: string) => {
+    setActiveDomains(prev => 
+      prev.includes(domain) 
+        ? prev.filter(d => d !== domain)
+        : [...prev, domain]
+    );
+  };
+
+  // Filter the events before passing them to the globe and ticker
+  const filteredEvents = events.filter(e => activeDomains.includes(e.domain));
 
   return (
     <div className="relative w-screen h-screen overflow-hidden bg-black">
@@ -126,7 +146,7 @@ function Dashboard() {
           </EntityDescription>
         </Entity>
 
-        {events.map((event) => {
+        {filteredEvents.map((event) => {
           if (!event.geo) return null;
           const position = Cartesian3.fromDegrees(event.geo.lon, event.geo.lat, 10000);
           
@@ -142,32 +162,23 @@ function Dashboard() {
                 outlineColor={Color.WHITE}
                 outlineWidth={2}
               />
-              <EntityDescription>
-                <div>
-                  <p><strong>Domain:</strong> {event.domain}</p>
-                  <p><strong>Priority:</strong> {event.priority}</p>
-                  <p><strong>Source:</strong> {event.source_type}</p>
-                  <p><strong>ID:</strong> {event.uid}</p>
-                </div>
-              </EntityDescription>
             </Entity>
           );
         })}
       </Viewer>
 
+      {/* HUD Layer: Top Filter Bar */}
+      <FilterBar activeDomains={activeDomains} onToggleDomain={toggleDomain} />
+
       {/* HUD Layer: Left Sidebar Ticker */}
-      <LiveTicker events={events} onEventClick={handleEventClick} />
+      <LiveTicker events={filteredEvents} onEventClick={handleEventClick} />
       
-      {/* HUD Layer: Top Right Controls */}
-      <div className="absolute top-4 right-4 z-20 flex gap-2">
-        {/* Temporary button to trigger graph view for testing. */}
-        <button 
-          onClick={() => setActiveGraphEntity('Israel')}
-          className="bg-black/80 backdrop-blur border border-sentinel-blue/50 text-white px-4 py-2 rounded font-mono text-sm flex items-center gap-2 hover:bg-sentinel-blue/20 transition-colors shadow-[0_0_15px_rgba(0,102,255,0.2)]"
-        >
-          <Network size={16} /> TEST GRAPH (ISRAEL)
-        </button>
-      </div>
+      {/* HUD Layer: Right Sidebar Dossier */}
+      <EntityDossier 
+        event={activeDossierEvent} 
+        onClose={() => setActiveDossierEvent(null)} 
+        onOpenGraph={(entityName) => setActiveGraphEntity(entityName)} 
+      />
 
       {/* Relational Web Overlay (Z-40) */}
       {activeGraphEntity && (
@@ -176,6 +187,9 @@ function Dashboard() {
           onClose={() => setActiveGraphEntity(null)} 
         />
       )}
+
+      {/* HUD Layer: Bottom Terminal Log */}
+      <TerminalLog />
 
     </div>
   );
