@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
-import { Viewer, Entity, PointGraphics, LabelGraphics, EntityDescription } from 'resium';
-import { Cartesian3, Cartesian2, Color, DistanceDisplayCondition, LabelStyle } from 'cesium';
+import { Viewer, Camera, Entity, PointGraphics, LabelGraphics, EntityDescription, PointPrimitiveCollection, PointPrimitive } from 'resium';
+import { Cartesian3, Cartesian2, Color, DistanceDisplayCondition, LabelStyle, Math as CesiumMath, Rectangle } from 'cesium';
 import LiveTicker from '../components/hud/LiveTicker';
 import type { IntelligenceEvent } from '../components/hud/LiveTicker';
 import RelationalWeb from '../components/hud/RelationalWeb';
@@ -22,16 +22,6 @@ function Dashboard() {
   const viewerRef = useRef<any>(null);
 
   useEffect(() => {
-    // 0. Fetch Strategic Knowledge Underlay
-    fetch('http://localhost:8001/api/v1/entities/strategic')
-      .then(res => res.json())
-      .then(data => {
-        if (data.status === 'success' && data.data) {
-          setStrategicEntities(data.data);
-        }
-      })
-      .catch(err => console.error("Failed to fetch strategic entities:", err));
-
     // 1. Fetch existing clusters on load
     fetch('http://localhost:8001/api/v1/clusters/active')
       .then(res => res.json())
@@ -97,6 +87,44 @@ function Dashboard() {
     };
   }, []);
 
+  const handleCameraMoveEnd = useCallback(() => {
+    if (!viewerRef.current || !viewerRef.current.cesiumElement) return;
+    const viewer = viewerRef.current.cesiumElement;
+    const camera = viewer.camera;
+    const ellipsoid = viewer.scene.globe.ellipsoid;
+    
+    // Compute view rectangle. This can sometimes be undefined if looking off into space.
+    const rect = camera.computeViewRectangle(ellipsoid, new Rectangle());
+    if (rect) {
+      let minLon = CesiumMath.toDegrees(rect.west);
+      let minLat = CesiumMath.toDegrees(rect.south);
+      let maxLon = CesiumMath.toDegrees(rect.east);
+      let maxLat = CesiumMath.toDegrees(rect.north);
+
+      // Simple handling for crossing the antimeridian
+      if (maxLon < minLon) {
+        maxLon += 360;
+      }
+
+      fetch(`http://localhost:8001/api/v1/entities/bbox?minLat=${minLat}&minLon=${minLon}&maxLat=${maxLat}&maxLon=${maxLon}`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.status === 'success' && data.data) {
+            setStrategicEntities(data.data);
+          }
+        })
+        .catch(err => console.error("Failed to fetch bbox entities:", err));
+    }
+  }, []);
+
+  // Run initial bounding box fetch shortly after mount once viewer is ready
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      handleCameraMoveEnd();
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [handleCameraMoveEnd]);
+
   const getPriorityColor = (priority: string) => {
     switch (priority?.toUpperCase()) {
       case 'CRITICAL': return Color.RED;
@@ -147,6 +175,8 @@ function Dashboard() {
         sceneModePicker={false}
         className="absolute inset-0 z-0"
       >
+        <Camera onMoveEnd={handleCameraMoveEnd} />
+
         {/* Static Test Marker to ensure rendering works */}
         <Entity
           name="Static Test Marker (New York)"
@@ -158,23 +188,36 @@ function Dashboard() {
           </EntityDescription>
         </Entity>
 
-        {/* Knowledge Underlay Layer (Muted) */}
-        {strategicEntities.map((entity) => {
+        {/* Knowledge Underlay Layer (High Performance Primitives) */}
+        <PointPrimitiveCollection>
+          {strategicEntities.map((entity) => {
+            if (!entity.geo) return null;
+            const position = Cartesian3.fromDegrees(entity.geo.lon, entity.geo.lat, 1000);
+            return (
+              <PointPrimitive
+                key={`strategic-point-${entity.uid}`}
+                position={position}
+                color={Color.fromCssColorString('rgba(0, 102, 255, 0.4)')}
+                outlineColor={Color.fromCssColorString('rgba(255, 255, 255, 0.1)')}
+                outlineWidth={1}
+                pixelSize={5}
+                distanceDisplayCondition={new DistanceDisplayCondition(0, 10000000)}
+              />
+            );
+          })}
+        </PointPrimitiveCollection>
+
+        {/* Mapped standard Entities for labels, but fewer of them and only for top threats */}
+        {strategicEntities.filter(e => e.priority === 'CRITICAL' || e.priority === 'HIGH').map((entity) => {
           if (!entity.geo) return null;
           const position = Cartesian3.fromDegrees(entity.geo.lon, entity.geo.lat, 1000);
           
           return (
             <Entity
-              key={`strategic-${entity.uid}`}
+              key={`strategic-label-${entity.uid}`}
               name={entity.headline}
               position={position}
             >
-              <PointGraphics 
-                pixelSize={10} 
-                color={Color.fromCssColorString('rgba(0, 102, 255, 0.4)')}
-                outlineColor={Color.fromCssColorString('rgba(255, 255, 255, 0.1)')}
-                outlineWidth={1}
-              />
               <LabelGraphics
                 text={`[ ${entity.headline} ]`}
                 font="bold 10px monospace"
@@ -185,7 +228,7 @@ function Dashboard() {
                 showBackground={true}
                 backgroundColor={Color.fromCssColorString('rgba(0, 0, 0, 0.6)')}
                 backgroundPadding={new Cartesian2(6, 4)}
-                pixelOffset={new Cartesian2(0, -18)}
+                pixelOffset={new Cartesian2(0, -10)}
                 distanceDisplayCondition={new DistanceDisplayCondition(0, 3000000)}
               />
               <EntityDescription>
