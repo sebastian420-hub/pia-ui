@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
-import { Viewer, Entity, PointGraphics, EntityDescription } from 'resium';
-import { Cartesian3, Color } from 'cesium';
+import { Viewer, Entity, PointGraphics, LabelGraphics, EntityDescription } from 'resium';
+import { Cartesian3, Cartesian2, Color, DistanceDisplayCondition, LabelStyle } from 'cesium';
 import LiveTicker from '../components/hud/LiveTicker';
 import type { IntelligenceEvent } from '../components/hud/LiveTicker';
 import RelationalWeb from '../components/hud/RelationalWeb';
@@ -175,6 +175,19 @@ function Dashboard() {
                 outlineColor={Color.fromCssColorString('rgba(255, 255, 255, 0.1)')}
                 outlineWidth={1}
               />
+              <LabelGraphics
+                text={`[ ${entity.headline} ]`}
+                font="bold 10px monospace"
+                fillColor={Color.fromCssColorString('rgba(255, 255, 255, 0.7)')}
+                style={LabelStyle.FILL_AND_OUTLINE}
+                outlineColor={Color.BLACK}
+                outlineWidth={2}
+                showBackground={true}
+                backgroundColor={Color.fromCssColorString('rgba(0, 0, 0, 0.6)')}
+                backgroundPadding={new Cartesian2(6, 4)}
+                pixelOffset={new Cartesian2(0, -18)}
+                distanceDisplayCondition={new DistanceDisplayCondition(0, 3000000)}
+              />
               <EntityDescription>
                 <div>
                   <p className="text-white/50 text-xs tracking-widest mb-2 border-b border-white/10">KNOWLEDGE UNDERLAY</p>
@@ -203,6 +216,19 @@ function Dashboard() {
                 color={getPriorityColor(event.priority)}
                 outlineColor={Color.WHITE}
                 outlineWidth={2}
+              />
+              <LabelGraphics
+                text={event.headline?.substring(0, 30) + (event.headline && event.headline.length > 30 ? '...' : '')}
+                font="bold 12px monospace"
+                fillColor={Color.WHITE}
+                style={LabelStyle.FILL_AND_OUTLINE}
+                outlineColor={Color.BLACK}
+                outlineWidth={3}
+                showBackground={true}
+                backgroundColor={new Color(0.02, 0.02, 0.02, 0.8)}
+                backgroundPadding={new Cartesian2(7, 5)}
+                pixelOffset={new Cartesian2(0, -25)}
+                distanceDisplayCondition={new DistanceDisplayCondition(0, 6000000)}
               />
             </Entity>
           );
