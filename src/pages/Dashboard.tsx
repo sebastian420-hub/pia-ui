@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
-import { Viewer, Camera, Entity, PointGraphics, LabelGraphics, EntityDescription, PointPrimitiveCollection, PointPrimitive } from 'resium';
+import { Viewer, Camera, Entity, PointGraphics, LabelGraphics, EntityDescription, PointPrimitiveCollection, PointPrimitive, EllipseGraphics } from 'resium';
 import { Cartesian3, Cartesian2, Color, DistanceDisplayCondition, LabelStyle, Math as CesiumMath, Rectangle } from 'cesium';
 import LiveTicker from '../components/hud/LiveTicker';
 import type { IntelligenceEvent } from '../components/hud/LiveTicker';
@@ -11,8 +11,18 @@ import AICopilot from '../components/hud/AICopilot';
 import { Network } from 'lucide-react';
 import './Dashboard.css';
 
+interface ClusterData {
+  uid: string;
+  name: string;
+  domain: string;
+  priority: string;
+  lat: number;
+  lon: number;
+}
+
 function Dashboard() {
   const [events, setEvents] = useState<IntelligenceEvent[]>([]);
+  const [clusters, setClusters] = useState<ClusterData[]>([]);
   const [strategicEntities, setStrategicEntities] = useState<IntelligenceEvent[]>([]);
   const [activeGraphEntity, setActiveGraphEntity] = useState<string | null>(null);
   const [activeDomains, setActiveDomains] = useState<string[]>(['MILITARY', 'POLITICAL', 'NATURAL', 'CYBER', 'FINANCE', 'UNKNOWN']);
@@ -22,20 +32,22 @@ function Dashboard() {
   const viewerRef = useRef<any>(null);
 
   useEffect(() => {
-    // 1. Fetch existing clusters on load
+    // 1. Fetch existing clusters on load to act as spatial Heatmaps
     fetch('http://localhost:8001/api/v1/clusters/active')
       .then(res => res.json())
       .then(data => {
         if (data.status === 'success' && data.data) {
-          const formatted = data.data.map((c: any) => ({
-            uid: c.cluster_id,
-            priority: c.priority || 'NORMAL',
-            domain: c.domain || 'UNKNOWN',
-            headline: c.title || c.name || 'Unknown Event',
-            source_type: 'SYSTEM',
-            geo: { lat: c.lat, lon: c.lon }
-          })).filter((c: any) => c.geo.lat && c.geo.lon);
-          setEvents(formatted);
+          const formatted = data.data
+            .filter((c: any) => c.lat && c.lon)
+            .map((c: any) => ({
+              uid: c.cluster_id,
+              name: c.name || 'Unknown Cluster',
+              priority: c.priority || 'NORMAL',
+              domain: c.domain || 'UNKNOWN',
+              lat: c.lat, 
+              lon: c.lon
+          }));
+          setClusters(formatted);
         }
       })
       .catch(err => console.error("Failed to fetch initial clusters:", err));
@@ -54,14 +66,12 @@ function Dashboard() {
           const data: IntelligenceEvent = JSON.parse(message.data);
           console.log('New Intelligence Received:', data);
           
-          if (data.geo && data.geo.lat && data.geo.lon) {
-            setEvents((prev) => {
-              if (prev.some(e => e.uid === data.uid)) return prev;
-              const updated = [...prev, data];
-              if (updated.length > 200) return updated.slice(updated.length - 200);
-              return updated;
-            });
-          }
+          setEvents((prev) => {
+            if (prev.some(e => e.uid === data.uid)) return prev;
+            const updated = [...prev, data];
+            if (updated.length > 200) return updated.slice(updated.length - 200);
+            return updated;
+          });
         } catch (e) {
           console.error('Failed to parse WebSocket message', e);
         }
@@ -88,7 +98,19 @@ function Dashboard() {
   }, []);
 
   const handleCameraMoveEnd = useCallback(() => {
-    if (!viewerRef.current || !viewerRef.current.cesiumElement) return;
+    if (!viewerRef.current || !viewerRef.current.cesiumElement) {
+        // Fallback fetch if viewer isn't perfectly ready
+        fetch(`http://localhost:8001/api/v1/entities/bbox?minLat=-90&minLon=-180&maxLat=90&maxLon=180`)
+          .then(res => res.json())
+          .then(data => {
+            if (data.status === 'success' && data.data) {
+              setStrategicEntities(data.data);
+            }
+          })
+          .catch(err => console.error("Failed to fetch bbox entities:", err));
+        return;
+    }
+
     const viewer = viewerRef.current.cesiumElement;
     const camera = viewer.camera;
     const ellipsoid = viewer.scene.globe.ellipsoid;
@@ -237,6 +259,51 @@ function Dashboard() {
                   <p><strong>Entity:</strong> {entity.headline}</p>
                   <p><strong>Type:</strong> {entity.domain}</p>
                   <p className="mt-2 text-xs italic">Permanently tracked strategic entity.</p>
+                </div>
+              </EntityDescription>
+            </Entity>
+          );
+        })}
+
+        {/* Heatmap Layer for Intelligence Clusters */}
+        {clusters.filter(c => activeDomains.includes(c.domain)).map((cluster) => {
+          const position = Cartesian3.fromDegrees(cluster.lon, cluster.lat, 0);
+          const color = getPriorityColor(cluster.priority);
+          // Make it semi-transparent
+          const fill = new Color(color.red, color.green, color.blue, 0.2);
+          const outline = new Color(color.red, color.green, color.blue, 0.5);
+          
+          return (
+            <Entity
+              key={`cluster-${cluster.uid}`}
+              name={cluster.name}
+              position={position}
+            >
+              <EllipseGraphics
+                semiMajorAxis={50000.0} // 50km radius
+                semiMinorAxis={50000.0}
+                material={fill}
+                outline={true}
+                outlineColor={outline}
+                outlineWidth={2}
+                height={0} // Clamp to ground
+              />
+              <LabelGraphics
+                text={`[ ZONE: ${cluster.domain} ]`}
+                font="bold 10px monospace"
+                fillColor={color}
+                style={LabelStyle.FILL_AND_OUTLINE}
+                outlineColor={Color.BLACK}
+                outlineWidth={2}
+                pixelOffset={new Cartesian2(0, 0)}
+                distanceDisplayCondition={new DistanceDisplayCondition(100000, 8000000)}
+              />
+              <EntityDescription>
+                <div>
+                  <p className="text-white/50 text-xs tracking-widest mb-2 border-b border-white/10">HOT ZONE: {cluster.priority}</p>
+                  <p><strong>Cluster:</strong> {cluster.name}</p>
+                  <p><strong>Domain:</strong> {cluster.domain}</p>
+                  <p className="mt-2 text-xs italic">Aggregated intelligence anomaly zone.</p>
                 </div>
               </EntityDescription>
             </Entity>

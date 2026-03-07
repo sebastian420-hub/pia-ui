@@ -55,6 +55,10 @@ const LiveTicker: React.FC<LiveTickerProps> = ({ events, onEventClick }) => {
   const [filter, setFilter] = useState<PriorityFilter>('ALL');
 
   const filteredEvents = events.filter(e => {
+    // 1. Remove systemic cluster noise from the raw intelligence ticker
+    if (e.source_type === 'SYSTEM' || e.headline?.startsWith('Situation:')) return false;
+
+    // 2. Apply priority filters
     if (filter === 'CRITICAL') return e.priority === 'CRITICAL';
     if (filter === 'HIGH+') return e.priority === 'CRITICAL' || e.priority === 'HIGH';
     return true; // ALL
