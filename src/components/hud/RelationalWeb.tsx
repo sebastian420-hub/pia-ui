@@ -10,6 +10,7 @@ interface Node {
   name: string;
   group: string;
   val: number;
+  description?: string;
 }
 
 interface Link {
@@ -17,6 +18,7 @@ interface Link {
   target: any;
   label: string;
   confidence: number;
+  reasoning?: string;
 }
 
 interface GraphData {
@@ -58,6 +60,12 @@ const RelationalWeb: React.FC<RelationalWebProps> = ({ entityName, onClose }) =>
       .then(result => {
         if (result.status === 'success') {
           setData(result.data);
+          
+          // Extreme-compact layout
+          if (fgRef.current) {
+            fgRef.current.d3Force('link').distance(50); 
+            fgRef.current.d3Force('charge').strength(-150); 
+          }
         } else {
           setError(result.message || 'Failed to load graph data.');
         }
@@ -69,9 +77,14 @@ const RelationalWeb: React.FC<RelationalWebProps> = ({ entityName, onClose }) =>
       .finally(() => setLoading(false));
   }, [entityName]);
 
+  // Process data: Simplified (1 edge per pair guaranteed by backend)
+  const processedData = React.useMemo(() => {
+    return { nodes: data.nodes, links: data.links };
+  }, [data]);
+
   // Helper to find connections for the selected node
   const getNodeConnections = (nodeId: string) => {
-    return data.links.filter(link => {
+    return processedData.links.filter(link => {
       const sourceId = typeof link.source === 'object' ? link.source.id : link.source;
       const targetId = typeof link.target === 'object' ? link.target.id : link.target;
       return sourceId === nodeId || targetId === nodeId;
@@ -141,6 +154,16 @@ const RelationalWeb: React.FC<RelationalWebProps> = ({ entityName, onClose }) =>
             {/* Body */}
             <div className="flex-1 overflow-y-auto p-4 space-y-6 no-scrollbar">
               
+              {/* Intelligence Brief */}
+              <div>
+                <h3 className="text-sentinel-blue text-xs tracking-widest mb-2 flex items-center gap-2">
+                  INTELLIGENCE BRIEF
+                </h3>
+                <div className="text-xs text-white/80 bg-white/5 p-3 rounded border border-white/10 leading-relaxed">
+                  {selectedNode.description ? selectedNode.description : <span className="italic text-white/40">No detailed profile available for this entity.</span>}
+                </div>
+              </div>
+
               {/* Metadata */}
               <div>
                 <h3 className="text-sentinel-blue text-xs tracking-widest mb-2 flex items-center gap-2">
@@ -190,6 +213,11 @@ const RelationalWeb: React.FC<RelationalWebProps> = ({ entityName, onClose }) =>
                           <span className="text-white/40">➔</span>
                           <span className="text-white font-bold truncate">{otherNode.name}</span>
                         </div>
+                        {link.reasoning && (
+                          <div className="mt-1 pt-1 border-t border-white/5 text-[10px] text-white/50 italic">
+                            {link.reasoning}
+                          </div>
+                        )}
                       </div>
                     );
                   })}
@@ -219,8 +247,9 @@ const RelationalWeb: React.FC<RelationalWebProps> = ({ entityName, onClose }) =>
         <div className="absolute inset-0 cursor-move">
           <ForceGraph3D
             ref={fgRef}
-            graphData={data}
+            graphData={processedData}
             nodeRelSize={4}
+            linkCurvature="curvature"
             // Generate a combined 3D object: A sphere + a floating text label
             nodeThreeObject={(node: any) => {
               const group = new THREE.Group();
@@ -238,12 +267,12 @@ const RelationalWeb: React.FC<RelationalWebProps> = ({ entityName, onClose }) =>
               // 2. The Text Label (Smaller, Always Visible)
               const sprite = new SpriteText(node.name);
               sprite.color = 'white';
-              sprite.textHeight = 2.5; // Reduced from 4
+              sprite.textHeight = 2.0;
               sprite.fontWeight = 'bold';
               sprite.fontFace = 'monospace';
-              sprite.position.y = (Math.cbrt(node.val) * 2) + 2.5; 
+              sprite.position.y = (Math.cbrt(node.val) * 2) + 2.0; 
               
-              sprite.backgroundColor = 'rgba(0,0,0,0.6)';
+              sprite.backgroundColor = 'rgba(0,0,0,0.7)';
               sprite.padding = 1.5;
               sprite.borderRadius = 2;
 
@@ -251,15 +280,18 @@ const RelationalWeb: React.FC<RelationalWebProps> = ({ entityName, onClose }) =>
               return group;
               }}
               // Link formatting
-              linkColor={() => 'rgba(255,255,255,0.15)'}
-              linkWidth={(link: any) => Math.max(1, link.confidence * 3)}
+              linkColor={() => 'rgba(255,255,255,0.2)'}
+              linkWidth={(link: any) => Math.max(1, link.confidence * 2)}
               // Relationship Text floating on the link
               linkThreeObjectExtend={true}     
               linkThreeObject={(link: any) => {
               const sprite = new SpriteText(link.label);
-              sprite.color = 'rgba(255,255,255,0.7)';
-              sprite.textHeight = 1.5; // Reduced from 2.5      
+              sprite.color = '#3b82f6'; // Bright blue for the "verb"
+              sprite.textHeight = 1.5; // Balanced for clarity and space
               sprite.fontFace = 'monospace'; 
+              sprite.backgroundColor = 'rgba(0,0,0,0.8)';
+              sprite.padding = 0.8;
+              sprite.borderRadius = 1;
               
               return sprite;
             }}
@@ -269,7 +301,7 @@ const RelationalWeb: React.FC<RelationalWebProps> = ({ entityName, onClose }) =>
               })));
               Object.assign(sprite.position, middlePos);
             }}
-            linkDirectionalArrowLength={3.5}
+            linkDirectionalArrowLength={4.5}
             linkDirectionalArrowRelPos={1}
             backgroundColor="#050505"
             onNodeClick={(node: any) => {
