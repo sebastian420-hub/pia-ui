@@ -49,7 +49,7 @@ const RelationalWeb: React.FC<RelationalWebProps> = ({ entityName, onClose }) =>
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
-  const fgRef = useRef<any>();
+  const fgRef = useRef<any>(null);
 
   useEffect(() => {
     setLoading(true);
@@ -296,10 +296,11 @@ const RelationalWeb: React.FC<RelationalWebProps> = ({ entityName, onClose }) =>
               return sprite;
             }}
             linkPositionUpdate={(sprite: any, { start, end }: any) => {
-              const middlePos = Object.assign(...['x', 'y', 'z'].map(c => ({
-                [c]: start[c] + (end[c] - start[c]) / 2
-              })));
-              Object.assign(sprite.position, middlePos);
+              if (sprite) {
+                sprite.position.x = start.x + (end.x - start.x) / 2;
+                sprite.position.y = start.y + (end.y - start.y) / 2;
+                sprite.position.z = start.z + (end.z - start.z) / 2;
+              }
             }}
             linkDirectionalArrowLength={4.5}
             linkDirectionalArrowRelPos={1}

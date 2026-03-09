@@ -8,6 +8,7 @@ import FilterBar from '../components/hud/FilterBar';
 import EntityDossier from '../components/hud/EntityDossier';
 import TerminalLog from '../components/hud/TerminalLog';
 import AICopilot from '../components/hud/AICopilot';
+import DocumentUploader from '../components/hud/DocumentUploader';
 import { Network } from 'lucide-react';
 import './Dashboard.css';
 
@@ -379,6 +380,9 @@ function Dashboard() {
           ARCHIVE
         </button>
       </div>
+
+      {/* HUD Layer: Document Ingestor */}
+      <DocumentUploader />
 
       {/* HUD Layer: Left Sidebar Ticker */}
       <LiveTicker events={filteredEvents} onEventClick={handleEventClick} />

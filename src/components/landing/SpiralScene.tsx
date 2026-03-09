@@ -1,8 +1,7 @@
-import React, { useRef, useLayoutEffect } from 'react';
+import React, { useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { useScroll, Text3D, Float, Environment, Sparkles } from '@react-three/drei';
 import * as THREE from 'three';
-import gsap from 'gsap';
 
 const SpiralScene: React.FC = () => {
   const scroll = useScroll();
