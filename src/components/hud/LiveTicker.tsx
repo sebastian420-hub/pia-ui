@@ -1,147 +1,69 @@
 import React, { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronLeft, ChevronRight, Newspaper, Plane, Activity, Cpu, Radio, AlertTriangle } from 'lucide-react';
-
-export interface IntelligenceEvent {
-  uid: string;
-  source_type?: string;
-  priority: string;
-  domain: string;
-  headline?: string;
-  name?: string;
-  geo: { lat: number; lon: number; } | null;
-}
+import type { IntelligenceEvent } from '../../lib/types';
+import { zuluShort } from '../../lib/format';
+import { DOMAIN_ABBR, priorityText } from '../../lib/symbology';
+export type { IntelligenceEvent } from '../../lib/types';
 
 interface LiveTickerProps {
   events: IntelligenceEvent[];
+  selectedUid?: string | null;
   onEventClick: (event: IntelligenceEvent) => void;
 }
 
-const getPriorityColor = (priority: string) => {
-  switch (priority?.toUpperCase()) {
-    case 'CRITICAL': return 'bg-sentinel-critical text-white';
-    case 'HIGH': return 'bg-sentinel-high text-white';
-    case 'NORMAL': return 'bg-sentinel-normal text-black';
-    default: return 'bg-sentinel-blue text-white';
-  }
-};
-
-const getBorderColor = (priority: string) => {
-  switch (priority?.toUpperCase()) {
-    case 'CRITICAL': return 'border-sentinel-critical';
-    case 'HIGH': return 'border-sentinel-high';
-    case 'NORMAL': return 'border-sentinel-normal';
-    default: return 'border-sentinel-blue';
-  }
-};
-
-const getSourceIcon = (sourceType?: string, domain?: string) => {
-  const st = (sourceType || '').toUpperCase();
-  const dom = (domain || '').toUpperCase();
-  
-  if (st === 'OSINT') return <Newspaper size={14} />;
-  if (st === 'GEOINT' || dom === 'AVIATION') return <Plane size={14} />;
-  if (dom === 'NATURAL' || dom === 'SEISMIC') return <Activity size={14} />;
-  if (st === 'SYSTEM') return <Cpu size={14} />;
-  if (st === 'SIGINT') return <Radio size={14} />;
-  
-  return <AlertTriangle size={14} />;
-};
-
 type PriorityFilter = 'ALL' | 'HIGH+' | 'CRITICAL';
 
-const LiveTicker: React.FC<LiveTickerProps> = ({ events, onEventClick }) => {
-  const [isExpanded, setIsExpanded] = useState(true);
+/** Dense report feed: one 26 px row per report — time · priority · domain · headline. */
+const LiveTicker: React.FC<LiveTickerProps> = ({ events, selectedUid, onEventClick }) => {
   const [filter, setFilter] = useState<PriorityFilter>('ALL');
 
-  const filteredEvents = events.filter(e => {
-    // 1. Remove systemic cluster noise from the raw intelligence ticker
+  const rows = events.filter(e => {
     if (e.source_type === 'SYSTEM' || e.headline?.startsWith('Situation:')) return false;
-
-    // 2. Apply priority filters
     if (filter === 'CRITICAL') return e.priority === 'CRITICAL';
     if (filter === 'HIGH+') return e.priority === 'CRITICAL' || e.priority === 'HIGH';
-    return true; // ALL
+    return true;
   });
+  const alerts = rows.filter(e => e.priority === 'CRITICAL' || e.priority === 'HIGH').slice(-5).reverse();
+  const display = [...rows].reverse().slice(0, 150);
 
-  const displayEvents = [...filteredEvents].reverse().slice(0, 50);
+  const Row = ({ e, alert }: { e: IntelligenceEvent; alert?: boolean }) => (
+    <button
+      onClick={() => onEventClick(e)}
+      className={`w-full grid grid-cols-[46px_28px_30px_1fr] gap-2 items-center px-3 h-[26px] text-left hover:bg-bg-2 border-l-2 ${
+        selectedUid === e.uid ? 'bg-bg-2 border-accent' : alert ? 'border-prio-high/60' : 'border-transparent'
+      }`}
+      title={e.headline}
+    >
+      <span className="text-text-3 tabular-nums">{zuluShort(e.created_at)}</span>
+      <span className={`${priorityText(e.priority)} font-semibold`}>{(e.priority || 'N').slice(0, 1)}</span>
+      <span className="text-text-3">{DOMAIN_ABBR[e.domain] ?? 'UNK'}</span>
+      <span className="text-text-1 truncate">{e.headline?.startsWith('[SIM]') && <span className="text-text-3 mr-1">SIM</span>}{e.headline}</span>
+    </button>
+  );
 
   return (
-    <>
-      <motion.div 
-        className="absolute top-0 left-0 h-full bg-black/60 backdrop-blur-md border-r border-white/10 z-10 flex flex-col font-mono text-sm"
-        initial={{ width: 320 }}
-        animate={{ width: isExpanded ? 320 : 0 }}
-        transition={{ duration: 0.3, ease: "easeInOut" }}
-      >
-        <div className="p-4 border-b border-white/10 flex flex-col gap-3 overflow-hidden whitespace-nowrap">
-          <div className="flex items-center justify-between">
-            <h2 className="text-white font-bold tracking-wider">LIVE FEED // {displayEvents.length}</h2>
-          </div>
-          
-          <div className="flex gap-2 text-xs">
-            <button 
-              onClick={() => setFilter('ALL')}
-              className={`px-2 py-1 rounded transition-colors ${filter === 'ALL' ? 'bg-white/20 text-white' : 'text-white/50 hover:bg-white/10'}`}
-            >
-              ALL
-            </button>
-            <button 
-              onClick={() => setFilter('HIGH+')}
-              className={`px-2 py-1 rounded transition-colors ${filter === 'HIGH+' ? 'bg-sentinel-high/40 text-sentinel-high' : 'text-white/50 hover:bg-white/10'}`}
-            >
-              HIGH+
-            </button>
-            <button 
-              onClick={() => setFilter('CRITICAL')}
-              className={`px-2 py-1 rounded transition-colors ${filter === 'CRITICAL' ? 'bg-sentinel-critical/40 text-sentinel-critical' : 'text-white/50 hover:bg-white/10'}`}
-            >
-              CRITICAL
-            </button>
-          </div>
+    <div className="flex-1 min-h-0 flex flex-col font-mono text-[12px]">
+      <div className="px-3 py-1.5 border-b border-line flex items-center justify-between">
+        <span className="text-[11px] tracking-[0.2em] text-text-3">REPORTS · {display.length}</span>
+        <div className="flex gap-1 text-[10px]">
+          {(['ALL', 'HIGH+', 'CRITICAL'] as PriorityFilter[]).map(f => (
+            <button key={f} onClick={() => setFilter(f)}
+              className={`px-1.5 py-0.5 rounded ${filter === f ? 'bg-bg-3 text-text-1' : 'text-text-3 hover:text-text-1'}`}>{f}</button>
+          ))}
         </div>
-        
-        <div className="flex-1 overflow-y-auto p-2 space-y-2 no-scrollbar">
-          <AnimatePresence>
-            {isExpanded && displayEvents.map((event) => (
-              <motion.div
-                key={event.uid}
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -20 }}
-                transition={{ duration: 0.2 }}
-                className={`p-3 rounded bg-white/5 border-l-4 ${getBorderColor(event.priority)} cursor-pointer hover:bg-white/10 transition-colors whitespace-normal flex flex-col gap-1`}
-                onClick={() => onEventClick(event)}
-              >
-                <div className="flex items-center justify-between mb-1">
-                  <div className="flex items-center gap-2">
-                    <span className="text-white/60" title={`Source: ${event.source_type}`}>
-                      {getSourceIcon(event.source_type, event.domain)}
-                    </span>
-                    <span className={`text-xs px-1.5 py-0.5 rounded font-bold ${getPriorityColor(event.priority)}`}>
-                      {event.priority || 'UNK'}
-                    </span>
-                  </div>
-                  <span className="text-white/50 text-xs truncate max-w-[100px]">{event.domain}</span>
-                </div>
-                <p className="text-white/90 line-clamp-2 leading-tight">{event.headline}</p>
-              </motion.div>
-            ))}
-          </AnimatePresence>
-        </div>
-      </motion.div>
+      </div>
 
-      {/* Collapse Toggle Button */}
-      <motion.button
-        className="absolute top-4 z-20 bg-black/80 backdrop-blur border border-white/20 text-white p-1.5 rounded-r cursor-pointer hover:bg-white/10 transition-colors"
-        animate={{ left: isExpanded ? 320 : 0 }}
-        transition={{ duration: 0.3, ease: "easeInOut" }}
-        onClick={() => setIsExpanded(!isExpanded)}
-        title={isExpanded ? "Collapse Feed" : "Expand Feed"}
-      >
-        {isExpanded ? <ChevronLeft size={20} /> : <ChevronRight size={20} />}
-      </motion.button>
-    </>
+      {alerts.length > 0 && filter === 'ALL' && (
+        <div className="border-b border-line bg-prio-high/5">
+          <div className="px-3 pt-1 text-[10px] tracking-[0.2em] text-prio-high">ALERTS</div>
+          {alerts.map(e => <Row key={`a-${e.uid}`} e={e} alert />)}
+        </div>
+      )}
+
+      <div className="flex-1 overflow-y-auto no-scrollbar">
+        {display.length === 0 && <div className="px-3 py-4 text-text-3">No reports in view.</div>}
+        {display.map(e => <Row key={e.uid} e={e} />)}
+      </div>
+    </div>
   );
 };
 

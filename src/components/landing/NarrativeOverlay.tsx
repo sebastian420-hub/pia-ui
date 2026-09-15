@@ -23,7 +23,7 @@ const NarrativeOverlay: React.FC = () => {
       <div style={{ position: 'absolute', top: '150vh', right: '10vw', color: 'white', maxWidth: '500px', textAlign: 'right' }}>
         <h2 style={{ fontSize: '3rem', margin: 0 }}>The Swarm.</h2>
         <p style={{ fontSize: '1.25rem', color: '#aaa' }}>
-          Autonomous agents perpetually polling global aircraft transponders, maritime cargo grids, and the dark web.
+          Autonomous agents polling open news feeds, seismic sensors and uploaded documents — with room for more sensors.
         </p>
       </div>
 
@@ -31,7 +31,7 @@ const NarrativeOverlay: React.FC = () => {
       <div style={{ position: 'absolute', top: '280vh', left: '10vw', color: 'white', maxWidth: '500px' }}>
         <h2 style={{ fontSize: '3rem', margin: 0 }}>The Graph.</h2>
         <p style={{ fontSize: '1.25rem', color: '#aaa' }}>
-          LLMs fortified by Chain-of-Thought reasoning extract entities and forge them into a multi-tenant, relational web of power.
+          Language models extract entities and relationships from every record and link them into a queryable knowledge graph.
         </p>
       </div>
 

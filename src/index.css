@@ -1,12 +1,32 @@
 @import "tailwindcss";
 
 @theme {
-  --color-sentinel-blue: #0066ff;
-  --color-sentinel-bg: #050505;
+  /* legacy names still used in a few places */
+  --color-sentinel-blue: #3b82f6;
+  --color-sentinel-bg: #0b0e12;
   --color-sentinel-critical: #ef4444;
-  --color-sentinel-high: #f97316;
-  --color-sentinel-normal: #eab308;
-  --font-mono: "JetBrains Mono", "Roboto Mono", monospace;
+  --color-sentinel-high: #f59e0b;
+  --color-sentinel-normal: #9aa3ad;
+
+  /* semantic tokens */
+  --color-bg-0: #07090c;
+  --color-bg-1: #0b0e12;
+  --color-bg-2: #12161c;
+  --color-bg-3: #1a2028;
+  --color-line: #232a33;
+  --color-text-1: #e6e9ed;
+  --color-text-2: #9aa3ad;
+  --color-text-3: #5f6b78;
+  --color-accent: #3b82f6;
+  --color-prio-critical: #ef4444;
+  --color-prio-high: #f59e0b;
+  --color-prio-normal: #9aa3ad;
+  --color-ok: #22c55e;
+  --color-warn: #f59e0b;
+  --color-err: #ef4444;
+  --color-camera: #38bdf8;
+  --font-mono: "JetBrains Mono", "Roboto Mono", ui-monospace, monospace;
+  --font-sans: "Inter", system-ui, sans-serif;
 }
 
 html, body, #root {
@@ -15,15 +35,22 @@ html, body, #root {
   width: 100%;
   height: 100%;
   overflow: hidden;
-  background-color: #000;
+  background-color: #07090c;
+  color: #e6e9ed;
+  font-family: "Inter", system-ui, sans-serif;
 }
 
-.cesium-viewer {
-  width: 100vw;
-  height: 100vh;
+/* The viewer fills whatever grid cell it is placed in (never the whole window). */
+.cesium-viewer, .cesium-viewer .cesium-widget, .cesium-viewer canvas {
+  width: 100%;
+  height: 100%;
 }
+.cesium-viewer .cesium-viewer-toolbar { display: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { scrollbar-width: none; }
 
-/* Hide Cesium Ion Watermark/Credits */
+/* Cesium / imagery attribution must stay visible (license requirement); keep it unobtrusive. */
 .cesium-viewer-bottom {
-  display: none !important;
+  opacity: 0.6;
+  font-size: 10px;
 }

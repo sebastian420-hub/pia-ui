@@ -2,18 +2,9 @@ import React, { useEffect, useState } from 'react';
 import { ArrowLeft, Database, Search, FolderSearch, Users, Activity, SlidersHorizontal, Network } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import RelationalWeb from '../components/hud/RelationalWeb';
-
-interface ArchiveRecord {
-  uid: string;
-  created_at: string | null;
-  source_type: string;
-  priority: string;
-  domain: string;
-  content_headline: string;
-  content_summary: string;
-  entities?: string[];
-  similarity?: number; // From semantic search
-}
+import { apiFetch, apiJson } from '../lib/api';
+import { zuluDateTime } from '../lib/format';
+import type { ArchiveRecord } from '../lib/types';
 
 const Archive: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'uir' | 'entities'>('uir');
@@ -26,6 +17,7 @@ const Archive: React.FC = () => {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalRecords, setTotalRecords] = useState(0);
+  const [error, setError] = useState<string | null>(null);
 
   // Global Key Listener for ESC to close graph
   useEffect(() => {
@@ -39,33 +31,23 @@ const Archive: React.FC = () => {
   // Fetch standard paginated data when not searching
   useEffect(() => {
     if (isSearching) return;
+    let cancelled = false;
+    Promise.resolve().then(() => { if (!cancelled) setLoading(true); });
 
-    setLoading(true);
-    if (activeTab === 'uir') {
-      fetch(`http://localhost:8001/api/v1/archive?page=${page}&limit=50`)
-        .then(res => res.json())
-        .then(data => {
-          if (data.status === 'success') {
-            setRecords(data.data);
-            setTotalPages(data.pagination.total_pages);
-            setTotalRecords(data.pagination.total);
-          }
-        })
-        .catch(err => console.error("Failed to fetch archive:", err))
-        .finally(() => setLoading(false));
-    } else if (activeTab === 'entities') {
-      fetch(`http://localhost:8001/api/v1/entities?page=${page}&limit=50`)
-        .then(res => res.json())
-        .then(data => {
-          if (data.status === 'success') {
-            setRecords(data.data);
-            setTotalPages(data.pagination.total_pages);
-            setTotalRecords(data.pagination.total);
-          }
-        })
-        .catch(err => console.error("Failed to fetch entities:", err))
-        .finally(() => setLoading(false));
-    }
+    const path = activeTab === 'uir' ? `/api/v1/archive?page=${page}&limit=50` : `/api/v1/entities?page=${page}&limit=50`;
+    apiFetch<ArchiveRecord[]>(path).then(data => {
+      if (cancelled) return;
+      if (data.status === 'success' && data.data) {
+        setError(null);
+        setRecords(data.data);
+        setTotalPages(data.pagination?.total_pages ?? 1);
+        setTotalRecords(data.pagination?.total ?? data.data.length);
+      } else {
+        setError(data.message || 'Failed to load records');
+      }
+      setLoading(false);
+    });
+    return () => { cancelled = true; };
   }, [page, activeTab, isSearching]);
 
   const handleSearch = async (e: React.FormEvent) => {
@@ -78,27 +60,21 @@ const Archive: React.FC = () => {
     setIsSearching(true);
     setLoading(true);
 
-    try {
-      const res = await fetch(`http://localhost:8001/api/v1/search/semantic`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          query: searchQuery,
-          target: activeTab,
-          limit: 30
-        })
-      });
-      const data = await res.json();
-      if (data.status === 'success') {
-        setRecords(data.data);
-        setTotalPages(1);
-        setTotalRecords(data.data.length);
-      }
-    } catch (err) {
-      console.error("Failed to search:", err);
-    } finally {
-      setLoading(false);
+    const data = await apiJson<ArchiveRecord[]>('/api/v1/search/semantic', {
+      query: searchQuery,
+      target: activeTab,
+      limit: 30,
+    });
+    if (data.status === 'success' && data.data) {
+      setError(null);
+      setRecords(data.data);
+      setTotalPages(1);
+      setTotalRecords(data.data.length);
+    } else {
+      setError(data.message || 'Search failed');
+      setRecords([]);
     }
+    setLoading(false);
   };
 
   const getPriorityColor = (priority: string) => {
@@ -121,7 +97,7 @@ const Archive: React.FC = () => {
           </Link>
           <div className="flex items-center gap-2 text-sentinel-blue">
             <Database size={20} />
-            <h1 className="text-xl font-bold tracking-widest">OMNISCIENT ARCHIVE</h1>
+            <h1 className="text-xl font-bold tracking-widest">ARCHIVE</h1>
           </div>
         </div>
         
@@ -143,14 +119,14 @@ const Archive: React.FC = () => {
                 className={`flex items-center gap-2 p-2 rounded text-sm transition-colors ${activeTab === 'uir' ? 'bg-sentinel-blue/20 text-sentinel-blue border border-sentinel-blue/30' : 'text-white/60 hover:bg-white/5'}`}
               >
                 <Activity size={16} />
-                Intelligence Vault
+                Reports
               </button>
               <button 
                 onClick={() => { setActiveTab('entities'); setPage(1); setIsSearching(false); setSearchQuery(''); }}
                 className={`flex items-center gap-2 p-2 rounded text-sm transition-colors ${activeTab === 'entities' ? 'bg-sentinel-blue/20 text-sentinel-blue border border-sentinel-blue/30' : 'text-white/60 hover:bg-white/5'}`}
               >
                 <Users size={16} />
-                Entity Directory
+                Entities
               </button>
             </div>
           </div>
@@ -160,7 +136,7 @@ const Archive: React.FC = () => {
               <SlidersHorizontal size={14} /> FILTERS
             </h2>
             <div className="text-xs text-white/30 italic">
-              Advanced filters (Date, Source, Domain) coming soon...
+              Date, source and domain filters arrive with the timeline (phase 3).
             </div>
           </div>
         </div>
@@ -174,7 +150,7 @@ const Archive: React.FC = () => {
               type="text" 
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder={activeTab === 'uir' ? "Semantic Search: 'Naval escalation in South China Sea'..." : "Search Entity Directory: 'Vladimir Putin', 'CIA'..."} 
+              placeholder={activeTab === 'uir' ? "Search reports by meaning, e.g. 'naval escalation South China Sea'" : "Search entities, e.g. 'SpaceX'"} 
               className="w-full bg-white/5 border border-white/10 text-white p-4 pl-12 pr-24 rounded focus:outline-none focus:border-sentinel-blue transition-colors"
             />
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-white/30" size={20} />
@@ -207,14 +183,20 @@ const Archive: React.FC = () => {
                   {loading ? (
                     <tr>
                       <td colSpan={isSearching ? 6 : 5} className="p-8 text-center text-sentinel-blue animate-pulse">
-                        {isSearching ? 'Vectorizing Query and Searching Storage...' : 'Querying Cold Storage...'}
+                        {isSearching ? 'Searching…' : 'Loading…'}
+                      </td>
+                    </tr>
+                  ) : error ? (
+                    <tr>
+                      <td colSpan={isSearching ? 6 : 5} className="p-8 text-center text-sentinel-critical">
+                        {error}
                       </td>
                     </tr>
                   ) : records.length === 0 ? (
                     <tr>
                       <td colSpan={isSearching ? 6 : 5} className="p-8 text-center text-white/50">
                         {activeTab === 'entities' && !isSearching 
-                          ? 'No entities found in directory.' 
+                          ? 'No entities found.' 
                           : 'No records found.'}
                       </td>
                     </tr>
@@ -222,7 +204,7 @@ const Archive: React.FC = () => {
                     <tr key={record.uid || idx} className="border-b border-white/5 hover:bg-white/5 transition-colors">
                       {activeTab === 'uir' && (
                         <td className="p-4 whitespace-nowrap text-white/70">
-                          {record.created_at ? new Date(record.created_at).toLocaleString() : 'N/A'}
+                          {zuluDateTime(record.created_at)}
                         </td>
                       )}
                       <td className={`p-4 font-bold ${getPriorityColor(record.priority)}`}>
@@ -250,7 +232,7 @@ const Archive: React.FC = () => {
                           <button 
                             onClick={(e) => { e.stopPropagation(); setActiveGraphEntity(record.content_headline); }}
                             className="bg-sentinel-blue/20 p-2 rounded hover:bg-sentinel-blue/40 text-sentinel-blue transition-colors"
-                            title="View Relational Network"
+                            title="Show relationships"
                           >
                             <Network size={16} />
                           </button>

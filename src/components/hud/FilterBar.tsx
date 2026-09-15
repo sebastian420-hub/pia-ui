@@ -1,46 +1,26 @@
 import React from 'react';
-import { motion } from 'framer-motion';
-import { Filter } from 'lucide-react';
+import { DOMAINS } from '../../lib/domains';
+import { DOMAIN_ABBR } from '../../lib/symbology';
 
 interface FilterBarProps {
   activeDomains: string[];
   onToggleDomain: (domain: string) => void;
 }
 
-const DOMAINS = ['MILITARY', 'POLITICAL', 'NATURAL', 'CYBER', 'FINANCE', 'UNKNOWN'];
-
-const FilterBar: React.FC<FilterBarProps> = ({ activeDomains, onToggleDomain }) => {
-  return (
-    <motion.div 
-      initial={{ y: -50, opacity: 0 }}
-      animate={{ y: 0, opacity: 1 }}
-      className="absolute top-0 left-1/2 -translate-x-1/2 mt-4 z-20 flex items-center gap-4 bg-black/60 backdrop-blur-md border border-white/10 p-2 rounded-full font-mono text-sm"
-    >
-      <div className="flex items-center gap-2 pl-2 pr-4 text-sentinel-blue border-r border-white/10">
-        <Filter size={16} />
-        <span className="font-bold tracking-widest">FILTERS</span>
-      </div>
-
-      <div className="flex gap-2">
-        {DOMAINS.map((domain) => {
-          const isActive = activeDomains.includes(domain);
-          return (
-            <button
-              key={domain}
-              onClick={() => onToggleDomain(domain)}
-              className={`px-3 py-1 rounded-full border transition-all ${
-                isActive 
-                  ? 'bg-sentinel-blue/20 border-sentinel-blue text-white shadow-[0_0_10px_rgba(0,102,255,0.3)]' 
-                  : 'bg-transparent border-white/20 text-white/50 hover:text-white hover:border-white/50'
-              }`}
-            >
-              {domain}
-            </button>
-          );
-        })}
-      </div>
-    </motion.div>
-  );
-};
+/** Domain pills; lives in the tool row under the status bar (never over the globe). */
+const FilterBar: React.FC<FilterBarProps> = ({ activeDomains, onToggleDomain }) => (
+  <div className="flex items-center gap-1 font-mono text-[11px]">
+    <span className="text-text-3 tracking-[0.2em] mr-1">DOMAIN</span>
+    {DOMAINS.map(d => {
+      const on = activeDomains.includes(d);
+      return (
+        <button key={d} onClick={() => onToggleDomain(d)} title={d}
+          className={`px-1.5 py-0.5 rounded border transition-colors ${on ? 'border-line bg-bg-3 text-text-1' : 'border-transparent text-text-3 hover:text-text-2'}`}>
+          {DOMAIN_ABBR[d]}
+        </button>
+      );
+    })}
+  </div>
+);
 
 export default FilterBar;

@@ -1,30 +1,15 @@
 import React, { useEffect, useState, useRef } from 'react';
 import ForceGraph3D from 'react-force-graph-3d';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Share2 } from 'lucide-react';
+import { X, Share2, ThumbsUp, ThumbsDown } from 'lucide-react';
 import SpriteText from 'three-spritetext';
 import * as THREE from 'three';
+import type { ForceGraphMethods } from 'react-force-graph-3d';
+import { apiFetch, apiJson } from '../../lib/api';
+import type { GraphData, GraphLink, GraphNode as Node } from '../../lib/types';
 
-interface Node {
-  id: string;
-  name: string;
-  group: string;
-  val: number;
-  description?: string;
-}
-
-interface Link {
-  source: any; // The library mutates this to an object after rendering
-  target: any;
-  label: string;
-  confidence: number;
-  reasoning?: string;
-}
-
-interface GraphData {
-  nodes: Node[];
-  links: Link[];
-}
+type Link = GraphLink;
+type FeedbackType = 'CONFIRMED' | 'REJECTED_HALLUCINATION';
 
 interface RelationalWebProps {
   entityName: string;
@@ -49,33 +34,41 @@ const RelationalWeb: React.FC<RelationalWebProps> = ({ entityName, onClose }) =>
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
-  const fgRef = useRef<any>(null);
+  const [feedbackSent, setFeedbackSent] = useState<Record<string, FeedbackType>>({});
+  const fgRef = useRef<ForceGraphMethods<Node, Link> | undefined>(undefined);
 
   useEffect(() => {
-    setLoading(true);
-    setError(null);
-    setSelectedNode(null); // Reset selection on new graph load
-    fetch(`http://localhost:8001/api/v1/graph/network/${encodeURIComponent(entityName)}`)
-      .then(res => res.json())
-      .then(result => {
-        if (result.status === 'success') {
-          setData(result.data);
-          
-          // Extreme-compact layout
-          if (fgRef.current) {
-            fgRef.current.d3Force('link').distance(50); 
-            fgRef.current.d3Force('charge').strength(-150); 
-          }
-        } else {
-          setError(result.message || 'Failed to load graph data.');
+    let cancelled = false;
+    Promise.resolve().then(() => {
+      if (cancelled) return;
+      setLoading(true);
+      setError(null);
+      setSelectedNode(null); // Reset selection on new graph load
+    });
+    apiFetch<GraphData>(`/api/v1/graph/network/${encodeURIComponent(entityName)}`).then(result => {
+      if (cancelled) return;
+      if (result.status === 'success' && result.data) {
+        setData(result.data);
+        // Extreme-compact layout
+        const fg = fgRef.current;
+        if (fg) {
+          fg.d3Force('link')?.distance?.(50);
+          fg.d3Force('charge')?.strength?.(-150);
         }
-      })
-      .catch(err => {
-        console.error(err);
-        setError('Network error connecting to API Bridge.');
-      })
-      .finally(() => setLoading(false));
+      } else {
+        setError(result.message || 'Failed to load graph data.');
+      }
+      setLoading(false);
+    });
+    return () => { cancelled = true; };
   }, [entityName]);
+
+  /** Human verdict on one inferred relationship (feeds the analyst's negative examples). */
+  const sendFeedback = async (relationshipId: string, type: FeedbackType) => {
+    const res = await apiJson(`/api/v1/feedback`, { relationship_id: relationshipId, feedback_type: type });
+    if (res.status === 'success') setFeedbackSent(prev => ({ ...prev, [relationshipId]: type }));
+    else console.error('Feedback failed:', res.message);
+  };
 
   // Process data: Simplified (1 edge per pair guaranteed by backend)
   const processedData = React.useMemo(() => {
@@ -102,7 +95,7 @@ const RelationalWeb: React.FC<RelationalWebProps> = ({ entityName, onClose }) =>
       {/* Top Bar / Close Button */}
       <div className="absolute top-0 left-0 w-full p-6 z-50 flex justify-between items-center bg-gradient-to-b from-black/80 to-transparent pointer-events-none">
         <div>
-          <h1 className="text-3xl font-mono font-bold text-white">Relational Network</h1>
+          <h1 className="text-2xl font-mono font-bold text-white">Relationships</h1>
           <p className="text-sentinel-blue font-mono text-sm tracking-widest mt-1">
             FOCUS: [{entityName.toUpperCase()}]
           </p>
@@ -111,18 +104,18 @@ const RelationalWeb: React.FC<RelationalWebProps> = ({ entityName, onClose }) =>
           onClick={onClose}
           className="pointer-events-auto text-white border border-white/20 bg-black/50 hover:bg-white/10 px-4 py-2 rounded font-mono text-sm transition-colors"
         >
-          RETURN TO GLOBE [ESC]
+          CLOSE [ESC]
         </button>
       </div>
 
       {/* Semantic Legend */}
       <div className="absolute bottom-6 left-6 z-50 font-mono text-xs bg-black/60 p-4 border border-white/10 rounded backdrop-blur">
-        <h3 className="text-white/50 mb-2 border-b border-white/10 pb-1">ONTOLOGY LEGEND</h3>
+        <h3 className="text-white/50 mb-2 border-b border-white/10 pb-1">LEGEND</h3>
         <div className="flex flex-col gap-2">
-          <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-[#ef4444]"></div><span className="text-white">MILITARY / THREAT</span></div>
+          <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-[#ef4444]"></div><span className="text-white">VESSEL / AIRCRAFT</span></div>
           <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-[#eab308]"></div><span className="text-white">ORGANIZATION</span></div>
-          <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-[#3b82f6]"></div><span className="text-white">PERSONNEL</span></div>
-          <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-[#22c55e]"></div><span className="text-white">GEOGRAPHY (GPE)</span></div>
+          <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-[#3b82f6]"></div><span className="text-white">PERSON</span></div>
+          <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-[#22c55e]"></div><span className="text-white">LOCATION</span></div>
         </div>
       </div>
 
@@ -157,22 +150,22 @@ const RelationalWeb: React.FC<RelationalWebProps> = ({ entityName, onClose }) =>
               {/* Intelligence Brief */}
               <div>
                 <h3 className="text-sentinel-blue text-xs tracking-widest mb-2 flex items-center gap-2">
-                  INTELLIGENCE BRIEF
+                  DESCRIPTION
                 </h3>
                 <div className="text-xs text-white/80 bg-white/5 p-3 rounded border border-white/10 leading-relaxed">
-                  {selectedNode.description ? selectedNode.description : <span className="italic text-white/40">No detailed profile available for this entity.</span>}
+                  {selectedNode.description ? selectedNode.description : <span className="italic text-white/40">No description yet.</span>}
                 </div>
               </div>
 
               {/* Metadata */}
               <div>
                 <h3 className="text-sentinel-blue text-xs tracking-widest mb-2 flex items-center gap-2">
-                  NODE METADATA
+                  DETAILS
                 </h3>
                 <div className="grid grid-cols-2 gap-4 text-xs bg-white/5 p-3 rounded border border-white/10">
                   <div>
-                    <span className="text-white/40 block mb-1">GRAVITY SCORE</span>
-                    <span className="text-white">{selectedNode.val} Mentions</span>
+                    <span className="text-white/40 block mb-1">MENTIONS</span>
+                    <span className="text-white">{selectedNode.val}</span>
                   </div>
                   <div>
                     <span className="text-white/40 block mb-1">INTERNAL ID</span>
@@ -184,7 +177,7 @@ const RelationalWeb: React.FC<RelationalWebProps> = ({ entityName, onClose }) =>
               {/* Connections Ledger */}
               <div>
                 <h3 className="text-sentinel-blue text-xs tracking-widest mb-3 flex items-center gap-2">
-                  <Share2 size={14} /> KNOWN CONNECTIONS
+                  <Share2 size={14} /> CONNECTIONS
                 </h3>
                 <div className="space-y-2">
                   {getNodeConnections(selectedNode.id).map((link, idx) => {
@@ -218,6 +211,32 @@ const RelationalWeb: React.FC<RelationalWebProps> = ({ entityName, onClose }) =>
                             {link.reasoning}
                           </div>
                         )}
+                        {link.relationships && link.relationships.length > 0 && (
+                          <div className="mt-1 flex flex-wrap gap-2">
+                            {link.relationships.map(rel => {
+                              const verdict = feedbackSent[rel.relationship_id];
+                              return (
+                                <span key={rel.relationship_id} className="flex items-center gap-1 text-[10px] text-white/50">
+                                  <span>{rel.type}</span>
+                                  {verdict ? (
+                                    <span className={verdict === 'CONFIRMED' ? 'text-green-400' : 'text-sentinel-critical'}>
+                                      {verdict === 'CONFIRMED' ? 'confirmed' : 'rejected'}
+                                    </span>
+                                  ) : (
+                                    <>
+                                      <button title="Confirm this relationship" className="hover:text-green-400" onClick={() => sendFeedback(rel.relationship_id, 'CONFIRMED')}>
+                                        <ThumbsUp size={11} />
+                                      </button>
+                                      <button title="Reject as hallucination" className="hover:text-sentinel-critical" onClick={() => sendFeedback(rel.relationship_id, 'REJECTED_HALLUCINATION')}>
+                                        <ThumbsDown size={11} />
+                                      </button>
+                                    </>
+                                  )}
+                                </span>
+                              );
+                            })}
+                          </div>
+                        )}
                       </div>
                     );
                   })}
@@ -231,7 +250,7 @@ const RelationalWeb: React.FC<RelationalWebProps> = ({ entityName, onClose }) =>
 
       {loading && (
         <div className="absolute inset-0 flex items-center justify-center z-50 pointer-events-none">
-          <div className="text-sentinel-blue font-mono animate-pulse text-xl tracking-widest">Querying Neural Core...</div>
+          <div className="text-sentinel-blue font-mono animate-pulse text-xl tracking-widest">Loading graph…</div>
         </div>
       )}
 
@@ -251,7 +270,7 @@ const RelationalWeb: React.FC<RelationalWebProps> = ({ entityName, onClose }) =>
             nodeRelSize={4}
             linkCurvature="curvature"
             // Generate a combined 3D object: A sphere + a floating text label
-            nodeThreeObject={(node: any) => {
+            nodeThreeObject={(node: Node) => {
               const group = new THREE.Group();
               
               // 1. The Sphere
@@ -281,10 +300,10 @@ const RelationalWeb: React.FC<RelationalWebProps> = ({ entityName, onClose }) =>
               }}
               // Link formatting
               linkColor={() => 'rgba(255,255,255,0.2)'}
-              linkWidth={(link: any) => Math.max(1, link.confidence * 2)}
+              linkWidth={(link: Link) => Math.max(1, link.confidence * 2)}
               // Relationship Text floating on the link
               linkThreeObjectExtend={true}     
-              linkThreeObject={(link: any) => {
+              linkThreeObject={(link: Link) => {
               const sprite = new SpriteText(link.label);
               sprite.color = '#3b82f6'; // Bright blue for the "verb"
               sprite.textHeight = 1.5; // Balanced for clarity and space
@@ -295,7 +314,7 @@ const RelationalWeb: React.FC<RelationalWebProps> = ({ entityName, onClose }) =>
               
               return sprite;
             }}
-            linkPositionUpdate={(sprite: any, { start, end }: any) => {
+            linkPositionUpdate={(sprite: THREE.Object3D, { start, end }: { start: { x: number; y: number; z: number }; end: { x: number; y: number; z: number } }) => {
               if (sprite) {
                 sprite.position.x = start.x + (end.x - start.x) / 2;
                 sprite.position.y = start.y + (end.y - start.y) / 2;
@@ -305,28 +324,20 @@ const RelationalWeb: React.FC<RelationalWebProps> = ({ entityName, onClose }) =>
             linkDirectionalArrowLength={4.5}
             linkDirectionalArrowRelPos={1}
             backgroundColor="#050505"
-            onNodeClick={(node: any) => {
+            onNodeClick={(node: Node) => {
               // Select node to open right panel
               setSelectedNode(node);
-              
+
               // Safe camera flight avoiding divide-by-zero on root node (0,0,0)
               const distance = 100;
-              const hypot = Math.hypot(node.x, node.y, node.z);
-              
-              let camPos;
-              if (hypot < 0.001) {
-                // If it's the center node, just pull back on the Z axis
-                camPos = { x: 0, y: 0, z: distance };
-              } else {
-                const distRatio = 1 + distance / hypot;
-                camPos = { x: node.x * distRatio, y: node.y * distRatio, z: node.z * distRatio };
-              }
-              
-              fgRef.current.cameraPosition(
-                camPos, 
-                node, // lookAt
-                1500  // ms transition
-              );
+              const x = node.x ?? 0, y = node.y ?? 0, z = node.z ?? 0;
+              const hypot = Math.hypot(x, y, z);
+
+              const camPos = hypot < 0.001
+                ? { x: 0, y: 0, z: distance } // center node: just pull back on Z
+                : (() => { const r = 1 + distance / hypot; return { x: x * r, y: y * r, z: z * r }; })();
+
+              fgRef.current?.cameraPosition(camPos, { x, y, z }, 1500);
             }}
           />
         </div>

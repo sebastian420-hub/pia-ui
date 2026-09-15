@@ -1,141 +1,101 @@
 import React, { useEffect, useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Network, X, FileText, AlertTriangle, Loader2 } from 'lucide-react';
-import type { IntelligenceEvent } from './LiveTicker';
+import { Network, X, Camera, Loader2 } from 'lucide-react';
+import type { IntelligenceEvent, Sensor } from '../../lib/types';
+import { apiFetch } from '../../lib/api';
+import { zuluDateTime } from '../../lib/format';
+import { priorityText } from '../../lib/symbology';
 
 interface EntityDossierProps {
-  event: IntelligenceEvent | null;
+  event: IntelligenceEvent;
   onClose: () => void;
   onOpenGraph: (entityName: string) => void;
+  onOpenCamera: (sensorId: string) => void;
 }
 
-interface EventDetails {
-  summary: string;
-  entities: string[];
-}
+interface EventDetails { summary: string; entities: string[] }
 
-const EntityDossier: React.FC<EntityDossierProps> = ({ event, onClose, onOpenGraph }) => {
+/** Right-column body for a report: summary, entities, and cameras within 5 km. */
+const EntityDossier: React.FC<EntityDossierProps> = ({ event, onClose, onOpenGraph, onOpenCamera }) => {
   const [details, setDetails] = useState<EventDetails | null>(null);
   const [loading, setLoading] = useState(false);
+  const [cameras, setCameras] = useState<Sensor[] | null>(null);
 
   useEffect(() => {
-    if (event && event.uid) {
-      setLoading(true);
-      setDetails(null);
-      fetch(`http://localhost:8001/api/v1/event/${event.uid}`)
-        .then(res => res.json())
-        .then(data => {
-          if (data.status === 'success') {
-            setDetails(data.data);
-          }
-        })
-        .catch(err => console.error("Failed to fetch event details:", err))
-        .finally(() => setLoading(false));
+    let cancelled = false;
+    Promise.resolve().then(() => { if (!cancelled) { setLoading(true); setDetails(null); setCameras(null); } });
+    apiFetch<EventDetails>(`/api/v1/event/${event.uid}`).then(r => {
+      if (cancelled) return;
+      if (r.status === 'success' && r.data) setDetails(r.data);
+      setLoading(false);
+    });
+    if (event.geo) {
+      apiFetch<Sensor[]>(`/api/v1/sensors?near_lat=${event.geo.lat}&near_lon=${event.geo.lon}&radius_km=5&limit=8`)
+        .then(r => { if (!cancelled && r.status === 'success' && r.data) setCameras(r.data); });
     }
+    return () => { cancelled = true; };
   }, [event]);
 
   return (
-    <AnimatePresence>
-      {event && (
-        <motion.div
-          initial={{ x: 400, opacity: 0 }}
-          animate={{ x: 0, opacity: 1 }}
-          exit={{ x: 400, opacity: 0 }}
-          transition={{ type: "spring", damping: 25, stiffness: 200 }}
-          className="absolute top-0 right-0 w-96 h-full bg-black/80 backdrop-blur-lg border-l border-white/10 z-30 flex flex-col font-mono text-sm shadow-2xl"
-        >
-          {/* Header */}
-          <div className="p-4 border-b border-white/10 flex justify-between items-start">
-            <div>
-              <div className="flex items-center gap-2 mb-2">
-                <span className={`px-2 py-0.5 text-xs font-bold rounded ${
-                  event.priority === 'CRITICAL' ? 'bg-sentinel-critical text-white' :
-                  event.priority === 'HIGH' ? 'bg-sentinel-high text-white' :
-                  'bg-sentinel-normal text-black'
-                }`}>
-                  {event.priority || 'UNK'}
-                </span>
-                <span className="text-white/50 text-xs">{event.domain}</span>
-              </div>
-              <h2 className="text-white font-bold text-lg leading-tight">{event.headline}</h2>
-            </div>
-            <button onClick={onClose} className="text-white/50 hover:text-white p-1">
-              <X size={20} />
-            </button>
+    <div className="h-full flex flex-col font-mono text-[12px]">
+      <div className="px-3 py-2 border-b border-line flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="text-[10px] tracking-[0.2em] text-text-3">REPORT · {event.source_type ?? '—'}</div>
+          <div className="text-text-1 text-[13px] leading-snug">{event.headline}</div>
+          <div className="flex gap-3 text-text-3 mt-1">
+            <span className={priorityText(event.priority)}>{event.priority}</span>
+            <span>{event.domain}</span>
+            <span>{zuluDateTime(event.created_at)}</span>
           </div>
+        </div>
+        <button onClick={onClose} className="text-text-3 hover:text-text-1 p-1"><X size={16} /></button>
+      </div>
 
-          {/* Body */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-6">
-            
-            {loading ? (
-               <div className="flex items-center gap-2 text-sentinel-blue mt-4">
-                  <Loader2 className="animate-spin" size={16} />
-                  <span>Decrypting Intelligence Payload...</span>
-               </div>
-            ) : (
-              <>
-                {/* Context/Summary */}
-                <div>
-                  <h3 className="text-sentinel-blue text-xs tracking-widest mb-2 flex items-center gap-2">
-                    <FileText size={14} /> AI SITREP
-                  </h3>
-                  <p className="text-white/80 leading-relaxed text-xs">
-                    {details?.summary || (event.source_type === 'SYSTEM' ? "System diagnostic event. No advanced NLP synthesis required." : "No summary available.")}
-                  </p>
-                </div>
+      <div className="flex-1 overflow-y-auto no-scrollbar p-3 space-y-4">
+        <section>
+          <h3 className="text-[10px] tracking-[0.2em] text-text-3 mb-1">SUMMARY</h3>
+          {loading ? <div className="text-text-3 flex items-center gap-2"><Loader2 size={12} className="animate-spin" /> loading</div>
+            : <p className="text-text-2 leading-relaxed">{details?.summary ?? '—'}</p>}
+        </section>
 
-                {/* Entity Extraction */}
-                <div>
-                  <h3 className="text-sentinel-blue text-xs tracking-widest mb-2 flex items-center gap-2">
-                    <AlertTriangle size={14} /> EXTRACTED ENTITIES
-                  </h3>
-                  <div className="flex flex-wrap gap-2">
-                    {details?.entities && details.entities.length > 0 ? (
-                      details.entities.map((ent, idx) => (
-                        <button 
-                          key={idx}
-                          onClick={() => onOpenGraph(ent)}
-                          className="px-2 py-1 bg-white/5 border border-white/20 hover:border-sentinel-blue hover:bg-sentinel-blue/10 rounded text-white text-xs transition-colors"
-                        >
-                          [{ent}]
-                        </button>
-                      ))
-                    ) : (
-                      <span className="text-white/40 text-xs italic">No specific entities isolated.</span>
-                    )}
-                  </div>
-                </div>
-              </>
+        <section>
+          <h3 className="text-[10px] tracking-[0.2em] text-text-3 mb-1">ENTITIES</h3>
+          {details && details.entities.length > 0 ? (
+            <div className="flex flex-wrap gap-1">
+              {details.entities.map(name => (
+                <button key={name} onClick={() => onOpenGraph(name)}
+                  className="px-1.5 py-0.5 border border-line rounded text-text-2 hover:text-text-1 hover:border-accent flex items-center gap-1">
+                  <Network size={10} /> {name}
+                </button>
+              ))}
+            </div>
+          ) : <div className="text-text-3">{loading ? '' : 'None extracted yet.'}</div>}
+        </section>
+
+        <section>
+          <h3 className="text-[10px] tracking-[0.2em] text-text-3 mb-1 flex items-center gap-1"><Camera size={11} /> CAMERAS WITHIN 5 KM</h3>
+          {!event.geo ? <div className="text-text-3">Report has no position.</div>
+            : cameras === null ? <div className="text-text-3">…</div>
+            : cameras.length === 0 ? <div className="text-text-3">No public cameras near this position.</div>
+            : (
+              <ul className="divide-y divide-line border border-line rounded">
+                {cameras.map(c => (
+                  <li key={c.sensor_id}>
+                    <button onClick={() => onOpenCamera(c.sensor_id)} className="w-full text-left px-2 py-1 hover:bg-bg-2 flex items-center justify-between gap-2">
+                      <span className="truncate text-text-1">{c.name}</span>
+                      <span className="text-text-3 shrink-0">{c.provider}{c.has_video ? ' · video' : ''}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
             )}
+        </section>
 
-            {/* Metadata */}
-            <div className="border-t border-white/10 pt-4 mt-auto">
-              <div className="grid grid-cols-2 gap-4 text-xs">
-                <div>
-                  <span className="text-white/40 block mb-1">SOURCE</span>
-                  <span className="text-white">{event.source_type}</span>
-                </div>
-                <div>
-                  <span className="text-white/40 block mb-1">RECORD ID</span>
-                  <span className="text-white truncate block" title={event.uid}>{event.uid.split('-')[0]}...</span>
-                </div>
-              </div>
-            </div>
-
-          </div>
-
-          {/* Action Footer */}
-          <div className="p-4 border-t border-white/10 bg-black/50">
-            <button 
-              onClick={() => onOpenGraph(details?.entities?.[0] || event.domain || 'Israel')}
-              className="w-full py-3 bg-sentinel-blue/20 hover:bg-sentinel-blue/40 border border-sentinel-blue text-white rounded font-bold tracking-widest flex items-center justify-center gap-2 transition-colors"
-            >
-              <Network size={16} /> VIEW RELATIONAL WEB
-            </button>
-          </div>
-        </motion.div>
-      )}
-    </AnimatePresence>
+        <dl className="grid grid-cols-[80px_1fr] gap-y-1 text-text-3 border-t border-line pt-2">
+          <dt>RECORD</dt><dd className="truncate text-text-2" title={event.uid}>{event.uid}</dd>
+          {event.geo && <><dt>POSITION</dt><dd className="tabular-nums text-text-2">{event.geo.lat.toFixed(4)}, {event.geo.lon.toFixed(4)}</dd></>}
+        </dl>
+      </div>
+    </div>
   );
 };
 
