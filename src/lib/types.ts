@@ -62,7 +62,89 @@ export interface Health {
 export type Selection =
   | { kind: 'report'; event: IntelligenceEvent }
   | { kind: 'camera'; sensorId: string }
+  | { kind: 'entity'; key: string }
   | null;
+
+// ── knowledge web ───────────────────────────────────────────────────────────
+
+export type EntityKind = 'PERSON' | 'ORG' | 'COUNTRY' | 'PLACE' | 'VESSEL' | 'AIRCRAFT' | 'EVENT' | 'UNKNOWN';
+export type RelationKind = 'HOSTILE' | 'COOPERATIVE' | 'ROLE' | 'OWNERSHIP' | 'MEMBERSHIP' | 'LOCATED' | 'MENTIONED_WITH';
+
+export interface EntitySummary {
+  entity_id: string;
+  qid: string | null;
+  kind: EntityKind;
+  name: string;
+  description: string | null;
+  resolution: string;
+  origin: string;
+  country_qid: string | null;
+  sitelinks: number;
+  mention_count: number;
+  first_seen: string | null;
+  last_seen: string | null;
+  geo: GeoPoint | null;
+  score?: number;
+}
+
+export interface RelationEntry {
+  entity_id: string;
+  qid: string | null;
+  name: string;
+  kind: EntityKind;
+  label: string | null;
+  source: 'events' | 'wikidata' | 'cooccurrence';
+  event_count: number;
+  weight: number;
+  first_seen: string | null;
+  last_seen: string | null;
+  direction: 'in' | 'out' | null;
+}
+
+export interface EntityCard extends EntitySummary {
+  aliases: { alias: string; source: string }[];
+  trend: { last_7d: number; prev_7d: number } | null;
+  relations: Partial<Record<RelationKind, RelationEntry[]>>;
+  event_counts: Record<string, number>;
+  recent_reports: { report_uid: string; role: string; surface: string; content_headline: string; created_at: string; source_id: string; priority: string }[];
+  wikidata_url: string | null;
+}
+
+export interface KgEvent {
+  event_id: string;
+  event_time: string;
+  time_precision?: string;
+  action: string;
+  confidence: number;
+  tone: number | null;
+  quote: string | null;
+  origin: string;
+  source_id: string | null;
+  report_uid: string | null;
+  content_headline: string | null;
+  actor: string | null; actor_qid?: string | null;
+  target: string | null; target_qid?: string | null;
+  location: string | null;
+  geo: GeoPoint | null;
+}
+
+export interface RelationEvidence {
+  a: EntitySummary; b: EntitySummary;
+  relations: { kind: RelationKind; source: string; label: string | null; event_count: number; weight: number; first_seen: string | null; last_seen: string | null }[];
+  events: (KgEvent & { source_url?: string | null })[];
+  shared_reports: { uid: string; content_headline: string; created_at: string; source_id: string }[];
+}
+
+export interface ReviewItem {
+  entity_id: string;
+  name: string;
+  kind: EntityKind;
+  mentions: number;
+  created_at: string;
+  note: string | null;
+  candidates: { qid: string; name?: string; kind?: string; description?: string | null }[];
+  examples: { report_uid: string; surface: string; headline: string }[];
+}
 
 export interface ClusterRow {
   cluster_id: string;
@@ -75,6 +157,7 @@ export interface ClusterRow {
 
 export interface ArchiveRecord {
   uid: string;
+  qid?: string | null;
   created_at: string | null;
   source_type: string;
   priority: string;
@@ -88,10 +171,11 @@ export interface ArchiveRecord {
 
 export interface GraphNode {
   id: string;
+  qid?: string | null;
   name: string;
   group: string;
   val: number;
-  description?: string;
+  description?: string | null;
   x?: number; y?: number; z?: number;
 }
 
@@ -100,8 +184,12 @@ export interface GraphLink {
   target: string | GraphNode;
   label: string;
   confidence: number;
+  kind?: RelationKind;
+  origin?: 'events' | 'wikidata' | 'cooccurrence';
+  event_count?: number;
+  first_seen?: string | null;
+  last_seen?: string | null;
   reasoning?: string | null;
-  relationships?: { relationship_id: string; type: string }[];
 }
 
 export interface GraphData { nodes: GraphNode[]; links: GraphLink[] }

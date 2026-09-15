@@ -2,7 +2,7 @@ import React from 'react';
 import { Layers } from 'lucide-react';
 import type { LayerCount } from '../../lib/types';
 
-export type LayerId = 'reports' | 'entities' | 'situations' | 'cameras';
+export type LayerId = 'reports' | 'entities' | 'situations' | 'cameras' | 'events';
 
 interface LayerRailProps {
   counts: LayerCount[];
@@ -10,7 +10,7 @@ interface LayerRailProps {
   onToggle: (id: LayerId) => void;
 }
 
-const ORDER: LayerId[] = ['reports', 'entities', 'situations', 'cameras'];
+const ORDER: LayerId[] = ['reports', 'events', 'entities', 'situations', 'cameras'];
 
 /** Layer toggles with counts; sits at the top of the left rail. */
 const LayerRail: React.FC<LayerRailProps> = ({ counts, enabled, onToggle }) => {
@@ -31,7 +31,7 @@ const LayerRail: React.FC<LayerRailProps> = ({ counts, enabled, onToggle }) => {
                 className={`w-full flex items-center justify-between px-3 py-1 font-mono text-[12px] hover:bg-bg-2 ${on ? 'text-text-1' : 'text-text-3'}`}
               >
                 <span className="flex items-center gap-2">
-                  <span className={`inline-block w-2 h-2 rounded-sm ${on ? (id === 'cameras' ? 'bg-camera' : 'bg-accent') : 'bg-line'}`} />
+                  <span className={`inline-block w-2 h-2 rounded-sm ${on ? (id === 'cameras' ? 'bg-camera' : id === 'events' ? 'bg-ok' : 'bg-accent') : 'bg-line'}`} />
                   {c?.label ?? id}
                 </span>
                 <span className="tabular-nums">{c ? c.count.toLocaleString() : '—'}</span>

@@ -1,0 +1,145 @@
+import React, { useEffect, useState } from 'react';
+import { X, ExternalLink, Globe, Share2, TrendingUp, TrendingDown } from 'lucide-react';
+import { apiFetch } from '../../lib/api';
+import { zuluDateTime, zuluShort } from '../../lib/format';
+import { KIND_HEX, RELATION_HEX } from '../../lib/symbology';
+import type { EntityCard, KgEvent, RelationKind } from '../../lib/types';
+
+interface Props {
+  entityKey: string;
+  onClose: () => void;
+  onOpenEntity: (key: string) => void;
+  onOpenReport: (uid: string) => void;
+  onOpenWeb: (key: string) => void;
+  onFlyTo?: (lon: number, lat: number) => void;
+}
+
+const ORDER: RelationKind[] = ['HOSTILE', 'COOPERATIVE', 'ROLE', 'OWNERSHIP', 'MEMBERSHIP', 'LOCATED', 'MENTIONED_WITH'];
+
+/** The "who is who" card: identity, trend, connections by kind, recent events and reports. */
+const EntityInspector: React.FC<Props> = ({ entityKey, onClose, onOpenEntity, onOpenReport, onOpenWeb, onFlyTo }) => {
+  const [card, setCard] = useState<EntityCard | null>(null);
+  const [events, setEvents] = useState<KgEvent[]>([]);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    Promise.resolve().then(() => { if (!cancelled) { setCard(null); setEvents([]); setError(null); } });
+    apiFetch<EntityCard>(`/api/v1/kg/entities/${encodeURIComponent(entityKey)}`).then(r => {
+      if (cancelled) return;
+      if (r.status === 'success' && r.data) {
+        setCard(r.data);
+        apiFetch<KgEvent[]>(`/api/v1/kg/entities/${r.data.entity_id}/events?limit=30`).then(e => {
+          if (!cancelled && e.status === 'success' && e.data) setEvents(e.data);
+        });
+      } else setError(r.message || 'Not in the knowledge web');
+    });
+    return () => { cancelled = true; };
+  }, [entityKey]);
+
+  const trendUp = card?.trend ? card.trend.last_7d > card.trend.prev_7d : false;
+
+  return (
+    <div className="h-full flex flex-col font-mono text-[12px]">
+      <div className="px-3 py-2 border-b border-line flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="text-[10px] tracking-[0.2em]" style={{ color: KIND_HEX[card?.kind ?? 'UNKNOWN'] }}>
+            {card?.kind ?? 'ENTITY'}{card?.qid ? ` · ${card.qid}` : ''}
+          </div>
+          <div className="text-text-1 text-[14px] leading-tight">{card?.name ?? entityKey}</div>
+          {card?.description && <div className="text-text-3 leading-snug mt-0.5">{card.description}</div>}
+        </div>
+        <button onClick={onClose} className="text-text-3 hover:text-text-1 p-1"><X size={16} /></button>
+      </div>
+
+      <div className="flex-1 overflow-y-auto no-scrollbar p-3 space-y-4">
+        {error && <div className="text-err">{error}</div>}
+        {card && (
+          <>
+            <div className="flex flex-wrap gap-2">
+              <button onClick={() => onOpenWeb(card.entity_id)} className="px-2 py-1 border border-line rounded text-text-2 hover:text-text-1 hover:border-accent flex items-center gap-1"><Share2 size={11} /> web</button>
+              {card.geo && onFlyTo && <button onClick={() => onFlyTo(card.geo!.lon, card.geo!.lat)} className="px-2 py-1 border border-line rounded text-text-2 hover:text-text-1 hover:border-accent flex items-center gap-1"><Globe size={11} /> globe</button>}
+              {card.wikidata_url && <a href={card.wikidata_url} target="_blank" rel="noreferrer" className="px-2 py-1 border border-line rounded text-text-2 hover:text-text-1 flex items-center gap-1"><ExternalLink size={11} /> wikidata</a>}
+            </div>
+
+            <dl className="grid grid-cols-[84px_1fr] gap-y-1 text-text-2">
+              <dt className="text-text-3">MENTIONS</dt>
+              <dd className="flex items-center gap-2">{card.mention_count}
+                {card.trend && (
+                  <span className={trendUp ? 'text-warn' : 'text-text-3'} title="last 7 days vs previous 7 days">
+                    {trendUp ? <TrendingUp size={11} className="inline" /> : <TrendingDown size={11} className="inline" />} {card.trend.last_7d} / {card.trend.prev_7d}
+                  </span>
+                )}
+              </dd>
+              <dt className="text-text-3">SEEN</dt><dd>{zuluDateTime(card.first_seen)} → {zuluDateTime(card.last_seen)}</dd>
+              {card.aliases.length > 1 && <><dt className="text-text-3">ALIASES</dt><dd className="text-text-3">{card.aliases.slice(0, 8).map(a => a.alias).join(' · ')}</dd></>}
+              {Object.keys(card.event_counts).length > 0 && (
+                <><dt className="text-text-3">ACTIONS</dt><dd className="text-text-3">{Object.entries(card.event_counts).map(([k, n]) => `${k.toLowerCase()} ${n}`).join(' · ')}</dd></>
+              )}
+            </dl>
+
+            <section>
+              <h3 className="text-[10px] tracking-[0.2em] text-text-3 mb-1">CONNECTIONS</h3>
+              {ORDER.filter(k => card.relations[k]?.length).length === 0 && <div className="text-text-3">None yet.</div>}
+              {ORDER.map(k => {
+                const rows = card.relations[k];
+                if (!rows || rows.length === 0) return null;
+                return (
+                  <div key={k} className="mb-2">
+                    <div className="text-[10px] tracking-widest mb-0.5" style={{ color: RELATION_HEX[k] }}>{k} · {rows.length}</div>
+                    <ul className="divide-y divide-line border border-line rounded">
+                      {rows.slice(0, 12).map((r, i) => (
+                        <li key={`${k}-${r.entity_id}-${r.source}-${i}`}>
+                          <button onClick={() => onOpenEntity(r.entity_id)} className="w-full text-left px-2 py-1 hover:bg-bg-2 flex items-center justify-between gap-2">
+                            <span className="truncate text-text-1"><span className="inline-block w-1.5 h-1.5 rounded-full mr-1.5" style={{ background: KIND_HEX[r.kind] }} />{r.name}</span>
+                            <span className="text-text-3 shrink-0 text-[10px]">{r.label ?? ''}{r.source === 'events' ? ` · ${r.event_count}×` : r.source === 'wikidata' ? (r.weight < 1 ? ' · former · wd' : ' · wd') : ''}</span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                );
+              })}
+            </section>
+
+            {events.length > 0 && (
+              <section>
+                <h3 className="text-[10px] tracking-[0.2em] text-text-3 mb-1">EVENTS</h3>
+                <ul className="space-y-1">
+                  {events.slice(0, 12).map(e => (
+                    <li key={e.event_id} className="border border-line rounded px-2 py-1">
+                      <div className="flex items-center justify-between text-[10px] text-text-3">
+                        <span>{zuluShort(e.event_time)} · {e.source_id ?? e.origin}</span>
+                        <span className={e.tone != null && e.tone < 0 ? 'text-prio-high' : 'text-text-3'}>{e.action}</span>
+                      </div>
+                      <div className="text-text-2 truncate">{e.actor} → {e.target ?? (e.location ? `@ ${e.location}` : '')}</div>
+                      {e.quote && <div className="text-text-3 italic text-[11px] line-clamp-2">“{e.quote}”</div>}
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
+
+            {card.recent_reports.length > 0 && (
+              <section>
+                <h3 className="text-[10px] tracking-[0.2em] text-text-3 mb-1">REPORTS</h3>
+                <ul className="divide-y divide-line border border-line rounded">
+                  {card.recent_reports.slice(0, 10).map(r => (
+                    <li key={r.report_uid}>
+                      <button onClick={() => onOpenReport(r.report_uid)} className="w-full text-left px-2 py-1 hover:bg-bg-2">
+                        <div className="text-text-1 truncate">{r.content_headline}</div>
+                        <div className="text-[10px] text-text-3">{zuluShort(r.created_at)} · {r.source_id} · as “{r.surface}”</div>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export default EntityInspector;

@@ -1,46 +1,36 @@
 import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
-import {
-  Viewer, Camera, Entity, PointGraphics, LabelGraphics, PointPrimitiveCollection, PointPrimitive,
-  EllipseGraphics, BillboardCollection, Billboard, ScreenSpaceEventHandler, ScreenSpaceEvent,
-} from 'resium';
+import { Viewer, Camera, ScreenSpaceEventHandler, ScreenSpaceEvent } from 'resium';
 import type { CesiumComponentRef } from 'resium';
 import {
-  Cartesian3, Cartesian2, Color, DistanceDisplayCondition, LabelStyle, Math as CesiumMath, Rectangle,
+  Cartesian3, Cartesian2, Math as CesiumMath, Rectangle,
   Viewer as CesiumViewer, ImageryLayer, UrlTemplateImageryProvider, Ion, ScreenSpaceEventType,
-  Entity as CesiumEntity, Credit, NearFarScalar,
+  Entity as CesiumEntity, Credit,
 } from 'cesium';
-import { Network, Upload, MessageSquare } from 'lucide-react';
+import { CameraLayer, WatchedEntityLayer, EventLayer, SituationLayer, ReportLayer } from '../components/globe/layers';
+import type { ClusterData } from '../components/globe/layers';
+import { Upload, MessageSquare } from 'lucide-react';
 import StatusBar from '../components/frame/StatusBar';
 import LayerRail from '../components/frame/LayerRail';
 import type { LayerId } from '../components/frame/LayerRail';
+import { Network as NetworkIcon } from 'lucide-react';
 import LiveTicker from '../components/hud/LiveTicker';
-import RelationalWeb from '../components/hud/RelationalWeb';
+import WebView from '../components/hud/WebView';
+import EntityInspector from '../components/hud/EntityInspector';
 import FilterBar from '../components/hud/FilterBar';
 import EntityDossier from '../components/hud/EntityDossier';
 import CameraInspector from '../components/hud/CameraInspector';
 import TerminalLog from '../components/hud/TerminalLog';
 import AICopilot from '../components/hud/AICopilot';
 import DocumentUploader from '../components/hud/DocumentUploader';
-import type { IntelligenceEvent, ClusterRow, ArchiveRecord, LayerCount, Sensor, Selection } from '../lib/types';
+import type { IntelligenceEvent, ClusterRow, ArchiveRecord, LayerCount, Sensor, Selection, KgEvent, EntitySummary } from '../lib/types';
 import { apiFetch, liveSocketUrl } from '../lib/api';
 import { DOMAINS } from '../lib/domains';
-import { priorityHex, CAMERA_HEX } from '../lib/symbology';
-
-interface ClusterData { uid: string; name: string; domain: string; priority: string; lat: number; lon: number }
 
 const MAX_EVENTS = 400;
 
 /** Cesium's default imagery needs an ion token; the default here is a token-free dark basemap. */
 const ionToken: string = import.meta.env.VITE_CESIUM_ION_TOKEN ?? '';
 if (ionToken) Ion.defaultAccessToken = ionToken;
-
-const CAMERA_SVG = (hex: string) =>
-  'data:image/svg+xml;utf8,' + encodeURIComponent(
-    `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 18 18">
-       <rect x="2" y="5" width="10" height="8" rx="1.5" fill="${hex}" stroke="#07090c" stroke-width="1"/>
-       <path d="M12 8 L16 6 V12 L12 10 Z" fill="${hex}" stroke="#07090c" stroke-width="1"/>
-     </svg>`);
-const CAMERA_ICONS = { online: CAMERA_SVG(CAMERA_HEX.online), unknown: CAMERA_SVG(CAMERA_HEX.unknown), offline: CAMERA_SVG(CAMERA_HEX.offline) };
 
 function archiveToEvent(r: ArchiveRecord): IntelligenceEvent {
   return { uid: r.uid, source_type: r.source_type, priority: r.priority, domain: r.domain, headline: r.content_headline, created_at: r.created_at, geo: r.geo ?? null };
@@ -52,7 +42,9 @@ function Dashboard() {
   const [strategicEntities, setStrategicEntities] = useState<IntelligenceEvent[]>([]);
   const [cameras, setCameras] = useState<Sensor[]>([]);
   const [layerCounts, setLayerCounts] = useState<LayerCount[]>([]);
-  const [layers, setLayers] = useState<Record<LayerId, boolean>>({ reports: true, entities: true, situations: true, cameras: true });
+  const [layers, setLayers] = useState<Record<LayerId, boolean>>({ reports: true, entities: true, situations: true, cameras: true, events: true });
+  const [kgEvents, setKgEvents] = useState<KgEvent[]>([]);
+  const [searchHits, setSearchHits] = useState<EntitySummary[]>([]);
   const [activeGraphEntity, setActiveGraphEntity] = useState<string | null>(null);
   const [activeDomains, setActiveDomains] = useState<string[]>([...DOMAINS]);
   const [selection, setSelection] = useState<Selection>(null);
@@ -96,6 +88,27 @@ function Dashboard() {
     });
   }, []);
 
+  const loadEvents = useCallback(() => {
+    const from = new Date(Date.now() - 48 * 3600 * 1000).toISOString();
+    apiFetch<KgEvent[]>(`/api/v1/kg/events?from=${encodeURIComponent(from)}&limit=800`).then(r => {
+      if (r.status === 'success' && r.data) setKgEvents(r.data.filter(e => e.geo));
+    });
+  }, []);
+
+  // Debounced, and stale responses are dropped so fast typing cannot show results for an older prefix.
+  const searchSeq = useRef(0);
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const searchEntities = useCallback((q: string) => {
+    if (searchTimer.current) clearTimeout(searchTimer.current);
+    if (!q.trim()) { setSearchHits([]); return; }
+    searchTimer.current = setTimeout(async () => {
+      const seq = ++searchSeq.current;
+      const r = await apiFetch<EntitySummary[]>(`/api/v1/kg/search?q=${encodeURIComponent(q.trim())}&limit=8`);
+      if (seq !== searchSeq.current) return;
+      setSearchHits(r.status === 'success' && r.data ? r.data : []);
+    }, 180);
+  }, []);
+
   const loadCameras = useCallback((query: string) => {
     apiFetch<Sensor[]>(`/api/v1/sensors?layer=cameras&${query}&limit=3000`).then(r => {
       if (r.status === 'success' && r.data) setCameras(r.data);
@@ -114,7 +127,8 @@ function Dashboard() {
       if (r.status === 'success' && r.data) addEvents([...r.data].reverse().map(archiveToEvent));
     });
     loadLayerCounts();
-    const countsTimer = setInterval(loadLayerCounts, 60000);
+    loadEvents();
+    const countsTimer = setInterval(() => { loadLayerCounts(); loadEvents(); }, 60000);
 
     let closed = false;
     let retry: ReturnType<typeof setTimeout> | undefined;
@@ -129,14 +143,14 @@ function Dashboard() {
     connectWs();
 
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') { setActiveGraphEntity(null); setSelection(null); setShowCopilot(false); setShowUpload(false); }
+      if (e.key === 'Escape') { setActiveGraphEntity(null); setSelection(null); setShowCopilot(false); setShowUpload(false); setSearchHits([]); }
     };
     window.addEventListener('keydown', onKey);
     return () => {
       closed = true; if (retry) clearTimeout(retry); wsRef.current?.close();
       window.removeEventListener('keydown', onKey); clearInterval(countsTimer);
     };
-  }, [addEvents, loadLayerCounts]);
+  }, [addEvents, loadLayerCounts, loadEvents]);
 
   // Viewport-driven layers (watched entities, cameras).
   const refreshViewport = useCallback(() => {
@@ -146,8 +160,9 @@ function Dashboard() {
   }, [layers.entities, layers.cameras, loadStrategic, loadCameras]);
 
   const handleCameraMoveEnd = useCallback(() => {
-    const viewer = viewerRef.current?.cesiumElement;
-    if (viewer) {
+    let viewer: CesiumViewer | undefined;
+    try { viewer = viewerRef.current?.cesiumElement; } catch { viewer = undefined; }
+    if (viewer && !viewer.isDestroyed()) {
       const rect = viewer.camera.computeViewRectangle(viewer.scene.globe.ellipsoid, new Rectangle());
       if (rect) {
         const minLon = CesiumMath.toDegrees(rect.west), minLat = CesiumMath.toDegrees(rect.south);
@@ -177,6 +192,16 @@ function Dashboard() {
   }, [flyTo]);
 
   const selectCamera = useCallback((sensorId: string) => setSelection({ kind: 'camera', sensorId }), []);
+  const selectEntity = useCallback((key: string) => { setSelection({ kind: 'entity', key }); setSearchHits([]); }, []);
+  const openReportByUid = useCallback(async (uid: string) => {
+    const known = events.find(e => e.uid === uid);
+    if (known) { selectReport(known); return; }
+    const r = await apiFetch<{ uid: string; created_at: string; source_type: string; priority: string; domain: string; content_headline: string; geo: { lat: number; lon: number } | null }>(`/api/v1/reports/${uid}`);
+    if (r.status === 'success' && r.data) {
+      const d = r.data;
+      selectReport({ uid: d.uid, created_at: d.created_at, source_type: d.source_type, priority: d.priority, domain: d.domain, headline: d.content_headline, geo: d.geo });
+    }
+  }, [events, selectReport]);
 
   // Globe picking: cameras are billboards with a Sensor as id; reports/situations are entities.
   const handlePick = useCallback((movement: { position: Cartesian2 }) => {
@@ -186,6 +211,12 @@ function Dashboard() {
     if (!picked) return;
     const id = picked.id;
     if (id && typeof id === 'object' && 'sensor_id' in id) { selectCamera((id as Sensor).sensor_id); return; }
+    if (id && typeof id === 'object' && 'event_id' in id) {
+      const ev = id as KgEvent;
+      if (ev.report_uid) openReportByUid(ev.report_uid);
+      else if (ev.actor_qid) selectEntity(ev.actor_qid);
+      return;
+    }
     if (id instanceof CesiumEntity && typeof id.id === 'string') {
       if (id.id.startsWith('report:')) {
         const uid = id.id.slice(7);
@@ -193,12 +224,13 @@ function Dashboard() {
         if (ev) selectReport(ev, false);
       }
     }
-  }, [events, selectCamera, selectReport]);
+  }, [events, selectCamera, selectReport, openReportByUid, selectEntity]);
 
   const toggleDomain = (d: string) => setActiveDomains(p => p.includes(d) ? p.filter(x => x !== d) : [...p, d]);
   const toggleLayer = (id: LayerId) => setLayers(p => ({ ...p, [id]: !p[id] }));
 
-  const filteredEvents = events.filter(e => activeDomains.includes(e.domain));
+  const filteredEvents = useMemo(() => events.filter(e => activeDomains.includes(e.domain)), [events, activeDomains]);
+  const visibleClusters = useMemo(() => clusters.filter(c => activeDomains.includes(c.domain)), [clusters, activeDomains]);
   const alertCount = filteredEvents.filter(e => e.priority === 'CRITICAL' || e.priority === 'HIGH').length;
   const selectedUid = selection?.kind === 'report' ? selection.event.uid : null;
   const inspectorOpen = selection !== null;
@@ -214,17 +246,32 @@ function Dashboard() {
           <form onSubmit={(e) => {
             e.preventDefault();
             const input = (e.target as HTMLFormElement).elements.namedItem('entitySearch') as HTMLInputElement;
-            if (input.value.trim()) { setActiveGraphEntity(input.value.trim()); input.value = ''; }
+            if (searchHits[0]) { selectEntity(searchHits[0].entity_id); input.value = ''; }
+            else if (input.value.trim()) { selectEntity(input.value.trim()); input.value = ''; }
           }} className="relative">
-            <input name="entitySearch" type="text" placeholder="Find entity…"
-              className="bg-bg-0 border border-line text-text-1 px-2 py-1 pr-7 rounded font-mono text-[12px] w-56 focus:outline-none focus:border-accent" />
-            <button type="submit" className="absolute right-2 top-1/2 -translate-y-1/2 text-text-3 hover:text-text-1"><Network size={13} /></button>
+            <input name="entitySearch" type="text" placeholder="Find entity (who is who)…" autoComplete="off"
+              onChange={(e) => searchEntities(e.target.value)}
+              className="bg-bg-0 border border-line text-text-1 px-2 py-1 pr-7 rounded font-mono text-[12px] w-64 focus:outline-none focus:border-accent" />
+            <button type="submit" className="absolute right-2 top-1/2 -translate-y-1/2 text-text-3 hover:text-text-1"><NetworkIcon size={13} /></button>
+            {searchHits.length > 0 && (
+              <ul className="absolute top-full mt-1 left-0 w-80 bg-bg-1 border border-line rounded shadow-xl z-50 font-mono text-[12px]">
+                {searchHits.map(h => (
+                  <li key={h.entity_id}>
+                    <button type="button" onClick={() => selectEntity(h.entity_id)} className="w-full text-left px-2 py-1 hover:bg-bg-2 flex items-center justify-between gap-2">
+                      <span className="truncate text-text-1">{h.name}</span>
+                      <span className="text-text-3 shrink-0">{h.kind}{h.qid ? ` · ${h.qid}` : ''}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
           </form>
           <button onClick={() => setShowUpload(v => !v)} title="Upload document"
             className={`p-1.5 rounded border ${showUpload ? 'border-accent text-text-1' : 'border-line text-text-2 hover:text-text-1'}`}><Upload size={14} /></button>
           <button onClick={() => setShowCopilot(v => !v)} title="Ask the assistant"
             className={`p-1.5 rounded border ${showCopilot ? 'border-accent text-text-1' : 'border-line text-text-2 hover:text-text-1'}`}><MessageSquare size={14} /></button>
           <a href="/archive" className="px-2 py-1 rounded border border-line font-mono text-[11px] text-text-2 hover:text-text-1 tracking-widest">ARCHIVE</a>
+          <a href="/review" className="px-2 py-1 rounded border border-line font-mono text-[11px] text-text-2 hover:text-text-1 tracking-widest" title="Names the resolver was not sure about">REVIEW</a>
         </div>
       </div>
 
@@ -249,73 +296,28 @@ function Dashboard() {
               <ScreenSpaceEvent action={handlePick as unknown as (e: unknown) => void} type={ScreenSpaceEventType.LEFT_CLICK} />
             </ScreenSpaceEventHandler>
 
-            {/* Watched entities (hollow, dim) */}
-            {layers.entities && (
-              <PointPrimitiveCollection>
-                {strategicEntities.map(en => en.geo && (
-                  <PointPrimitive key={`en-${en.uid}`} position={Cartesian3.fromDegrees(en.geo.lon, en.geo.lat, 500)}
-                    color={Color.fromCssColorString('rgba(59,130,246,0.35)')} outlineColor={Color.fromCssColorString('rgba(147,197,253,0.6)')}
-                    outlineWidth={1} pixelSize={5} distanceDisplayCondition={new DistanceDisplayCondition(0, 12000000)} />
-                ))}
-              </PointPrimitiveCollection>
-            )}
-
-            {/* Cameras */}
-            {layers.cameras && (
-              <BillboardCollection>
-                {cameras.map(c => (
-                  <Billboard key={`cam-${c.sensor_id}`} id={c}
-                    position={Cartesian3.fromDegrees(c.geo.lon, c.geo.lat, 30)}
-                    image={c.status === 'ONLINE' ? CAMERA_ICONS.online : c.status === 'OFFLINE' ? CAMERA_ICONS.offline : CAMERA_ICONS.unknown}
-                    scaleByDistance={new NearFarScalar(2000, 1.0, 3000000, 0.35)}
-                    distanceDisplayCondition={new DistanceDisplayCondition(0, 4000000)}
-                    disableDepthTestDistance={Number.POSITIVE_INFINITY} />
-                ))}
-              </BillboardCollection>
-            )}
-
-            {/* Situations (clusters) */}
-            {layers.situations && clusters.filter(c => activeDomains.includes(c.domain)).map(c => {
-              const hex = priorityHex(c.priority);
-              const col = Color.fromCssColorString(hex);
-              return (
-                <Entity key={`cluster-${c.uid}`} id={`situation:${c.uid}`} position={Cartesian3.fromDegrees(c.lon, c.lat, 0)}>
-                  <EllipseGraphics semiMajorAxis={50000} semiMinorAxis={50000} material={col.withAlpha(0.08)} outline outlineColor={col.withAlpha(0.45)} outlineWidth={1} height={0} />
-                </Entity>
-              );
-            })}
-
-            {/* Reports */}
-            {layers.reports && filteredEvents.map(ev => ev.geo && (
-              <Entity key={ev.uid} id={`report:${ev.uid}`} position={Cartesian3.fromDegrees(ev.geo.lon, ev.geo.lat, 1000)}>
-                <PointGraphics
-                  pixelSize={ev.priority === 'CRITICAL' ? 11 : ev.priority === 'HIGH' ? 9 : 6}
-                  color={Color.fromCssColorString(priorityHex(ev.priority))}
-                  outlineColor={Color.fromCssColorString('#07090c')} outlineWidth={1.5}
-                  disableDepthTestDistance={Number.POSITIVE_INFINITY} />
-                {(ev.priority === 'CRITICAL' || ev.priority === 'HIGH' || selectedUid === ev.uid) && (
-                  <LabelGraphics
-                    text={(ev.headline ?? '').slice(0, 48) + ((ev.headline?.length ?? 0) > 48 ? '…' : '')}
-                    font="11px JetBrains Mono, monospace" fillColor={Color.fromCssColorString('#e6e9ed')}
-                    style={LabelStyle.FILL_AND_OUTLINE} outlineColor={Color.fromCssColorString('#07090c')} outlineWidth={3}
-                    showBackground backgroundColor={Color.fromCssColorString('rgba(11,14,18,0.85)')} backgroundPadding={new Cartesian2(6, 3)}
-                    pixelOffset={new Cartesian2(0, -16)} distanceDisplayCondition={new DistanceDisplayCondition(0, 8000000)}
-                    disableDepthTestDistance={Number.POSITIVE_INFINITY} />
-                )}
-              </Entity>
-            ))}
+            {layers.entities && <WatchedEntityLayer entities={strategicEntities} />}
+            {layers.cameras && <CameraLayer cameras={cameras} />}
+            {layers.events && <EventLayer events={kgEvents} />}
+            {layers.situations && <SituationLayer clusters={visibleClusters} />}
+            {layers.reports && <ReportLayer reports={filteredEvents} selectedUid={selectedUid} />}
           </Viewer>
 
           {/* Floating tools live inside the globe cell, so they can never cover the inspector. */}
           {showUpload && <div className="absolute top-3 right-3 z-20"><DocumentUploader onClose={() => setShowUpload(false)} /></div>}
           {showCopilot && <div className="absolute bottom-3 right-3 z-20"><AICopilot onClose={() => setShowCopilot(false)} /></div>}
-          {activeGraphEntity && <RelationalWeb entityName={activeGraphEntity} onClose={() => setActiveGraphEntity(null)} />}
+          {activeGraphEntity && <WebView entityKey={activeGraphEntity} onClose={() => setActiveGraphEntity(null)} onOpenEntity={(k) => { setActiveGraphEntity(null); selectEntity(k); }} />}
         </main>
 
         <aside className={`min-h-0 bg-bg-1 border-l border-line overflow-hidden ${inspectorOpen ? '' : 'hidden'}`}>
           {selection?.kind === 'report' && (
             <EntityDossier event={selection.event} onClose={() => setSelection(null)}
-              onOpenGraph={(n) => setActiveGraphEntity(n)} onOpenCamera={selectCamera} />
+              onOpenGraph={(n) => selectEntity(n)} onOpenCamera={selectCamera} />
+          )}
+          {selection?.kind === 'entity' && (
+            <EntityInspector entityKey={selection.key} onClose={() => setSelection(null)}
+              onOpenEntity={selectEntity} onOpenReport={openReportByUid}
+              onOpenWeb={(k) => setActiveGraphEntity(k)} onFlyTo={(lon, lat) => flyTo(lon, lat, 800000)} />
           )}
           {selection?.kind === 'camera' && <CameraInspector sensorId={selection.sensorId} onClose={() => setSelection(null)} />}
         </aside>

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { ArrowLeft, Database, Search, FolderSearch, Users, Activity, SlidersHorizontal, Network } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import RelationalWeb from '../components/hud/RelationalWeb';
+import WebView from '../components/hud/WebView';
 import { apiFetch, apiJson } from '../lib/api';
 import { zuluDateTime } from '../lib/format';
 import type { ArchiveRecord } from '../lib/types';
@@ -230,7 +230,7 @@ const Archive: React.FC = () => {
                       {activeTab === 'entities' && (
                         <td className="p-4">
                           <button 
-                            onClick={(e) => { e.stopPropagation(); setActiveGraphEntity(record.content_headline); }}
+                            onClick={(e) => { e.stopPropagation(); setActiveGraphEntity(record.qid ?? record.uid); }}
                             className="bg-sentinel-blue/20 p-2 rounded hover:bg-sentinel-blue/40 text-sentinel-blue transition-colors"
                             title="Show relationships"
                           >
@@ -272,10 +272,7 @@ const Archive: React.FC = () => {
 
       {/* Relational Web Overlay (Z-40) */}
       {activeGraphEntity && (
-        <RelationalWeb 
-          entityName={activeGraphEntity} 
-          onClose={() => setActiveGraphEntity(null)} 
-        />
+        <WebView entityKey={activeGraphEntity} onClose={() => setActiveGraphEntity(null)} onOpenEntity={(k) => setActiveGraphEntity(k)} />
       )}
     </div>
   );
