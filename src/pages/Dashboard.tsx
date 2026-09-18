@@ -3,12 +3,15 @@ import { Viewer, Camera, ScreenSpaceEventHandler, ScreenSpaceEvent } from 'resiu
 import type { CesiumComponentRef } from 'resium';
 import {
   Cartesian3, Cartesian2, Math as CesiumMath, Rectangle,
-  Viewer as CesiumViewer, ImageryLayer, UrlTemplateImageryProvider, Ion, ScreenSpaceEventType,
-  Entity as CesiumEntity, Credit,
+  Viewer as CesiumViewer, Ion, ScreenSpaceEventType,
+  Entity as CesiumEntity,
 } from 'cesium';
 import { CameraLayer, WatchedEntityLayer, EventLayer, SituationLayer, ReportLayer } from '../components/globe/layers';
 import type { ClusterData } from '../components/globe/layers';
 import { Upload, MessageSquare } from 'lucide-react';
+import { BasemapSwitcher } from '../components/globe/BasemapSwitcher';
+import { BASEMAPS, DEFAULT_BASEMAP } from '../lib/basemaps';
+import type { BasemapId } from '../lib/basemaps';
 import StatusBar from '../components/frame/StatusBar';
 import LayerRail from '../components/frame/LayerRail';
 import type { LayerId } from '../components/frame/LayerRail';
@@ -57,16 +60,28 @@ function Dashboard() {
   const viewerRef = useRef<CesiumComponentRef<CesiumViewer>>(null);
   const bboxRef = useRef<string>('minLat=-90&minLon=-180&maxLat=90&maxLon=180');
 
+
+  // ── Basemap switcher ─────────────────────────────────────────────────────
+  const [basemapId, setBasemapId] = useState<BasemapId>(DEFAULT_BASEMAP);
+
+  /** Initial layer passed to <Viewer>; subsequent swaps go through the effect below. */
   const baseLayer = useMemo(() => {
-    if (ionToken) return undefined;
-    // Esri "World Dark Gray Base": token-free, dark, low-saturation; attribution required.
-    // (CARTO dark tiles now watermark "API KEY REQUIRED" for browser requests.)
-    return new ImageryLayer(new UrlTemplateImageryProvider({
-      url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}',
-      credit: new Credit('Basemap: Esri, HERE, Garmin, © OpenStreetMap contributors, and the GIS user community', true),
-      maximumLevel: 16,
-    }));
-  }, []);
+    if (ionToken) return undefined; // let Ion handle imagery
+    return BASEMAPS.find(b => b.id === basemapId)?.layer() ?? BASEMAPS[0].layer();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // intentionally empty — only used for the initial mount
+
+  /** Swap the basemap layer whenever the user picks a new style. */
+  useEffect(() => {
+    const viewer = viewerRef.current?.cesiumElement;
+    if (!viewer || ionToken) return;
+    const def = BASEMAPS.find(b => b.id === basemapId);
+    if (!def) return;
+    viewer.imageryLayers.removeAll();
+    viewer.imageryLayers.add(def.layer());
+  }, [basemapId]);
+
+
 
   const addEvents = useCallback((incoming: IntelligenceEvent[]) => {
     setEvents(prev => {
@@ -304,6 +319,7 @@ function Dashboard() {
           </Viewer>
 
           {/* Floating tools live inside the globe cell, so they can never cover the inspector. */}
+          <BasemapSwitcher current={basemapId} onChange={setBasemapId} />
           {showUpload && <div className="absolute top-3 right-3 z-20"><DocumentUploader onClose={() => setShowUpload(false)} /></div>}
           {showCopilot && <div className="absolute bottom-3 right-3 z-20"><AICopilot onClose={() => setShowCopilot(false)} /></div>}
           {activeGraphEntity && <WebView entityKey={activeGraphEntity} onClose={() => setActiveGraphEntity(null)} onOpenEntity={(k) => { setActiveGraphEntity(null); selectEntity(k); }} />}

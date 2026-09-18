@@ -28,7 +28,11 @@ const LABEL_FILL = Color.fromCssColorString('#e6e9ed');
 const LABEL_BG = Color.fromCssColorString('rgba(11,14,18,0.85)');
 const LABEL_PAD = new Cartesian2(6, 3);
 const LABEL_OFFSET = new Cartesian2(0, -16);
-const INF = Number.POSITIVE_INFINITY;
+// Near-surface depth-test disable distances.
+// These prevent z-fighting when the camera is zoomed close to the surface,
+// while still letting the globe occlude markers on the far side at normal view.
+const DEPTH_DISABLE_DIST = 1500;        // metres — points, billboards
+const LABEL_DEPTH_DISABLE_DIST = 3000;  // metres — labels float a bit higher
 const colorCache = new Map<string, Color>();
 const color = (hex: string, alpha = 1) => {
   const k = `${hex}|${alpha}`;
@@ -44,7 +48,7 @@ export const CameraLayer = React.memo(function CameraLayer({ cameras }: { camera
         <Billboard key={c.sensor_id} id={c}
           position={Cartesian3.fromDegrees(c.geo.lon, c.geo.lat, 30)}
           image={c.status === 'ONLINE' ? CAMERA_ICONS.online : c.status === 'OFFLINE' ? CAMERA_ICONS.offline : CAMERA_ICONS.unknown}
-          scaleByDistance={CAMERA_SCALE} distanceDisplayCondition={CAMERA_DDC} disableDepthTestDistance={INF} />
+          scaleByDistance={CAMERA_SCALE} distanceDisplayCondition={CAMERA_DDC} disableDepthTestDistance={DEPTH_DISABLE_DIST} />
       ))}
     </BillboardCollection>
   );
@@ -68,7 +72,7 @@ export const EventLayer = React.memo(function EventLayer({ events }: { events: K
         <PointPrimitive key={`ev-${ev.event_id}`} id={ev}
           position={Cartesian3.fromDegrees(ev.geo.lon, ev.geo.lat, 2000)}
           color={color(toneHex(ev.tone), 0.85)} outlineColor={DARK} outlineWidth={1}
-          pixelSize={ev.action === 'ATTACK' ? 7 : 5} disableDepthTestDistance={INF} />
+          pixelSize={ev.action === 'ATTACK' ? 7 : 5} disableDepthTestDistance={DEPTH_DISABLE_DIST} />
       ))}
     </PointPrimitiveCollection>
   );
@@ -96,13 +100,13 @@ export const ReportLayer = React.memo(function ReportLayer({ reports, selectedUi
         <Entity key={ev.uid} id={`report:${ev.uid}`} position={Cartesian3.fromDegrees(ev.geo.lon, ev.geo.lat, 1000)}>
           <PointGraphics
             pixelSize={ev.priority === 'CRITICAL' ? 11 : ev.priority === 'HIGH' ? 9 : 6}
-            color={color(priorityHex(ev.priority))} outlineColor={DARK} outlineWidth={1.5} disableDepthTestDistance={INF} />
+            color={color(priorityHex(ev.priority))} outlineColor={DARK} outlineWidth={1.5} disableDepthTestDistance={DEPTH_DISABLE_DIST} />
           {(ev.priority === 'CRITICAL' || ev.priority === 'HIGH' || selectedUid === ev.uid) && (
             <LabelGraphics
               text={(ev.headline ?? '').slice(0, 48) + ((ev.headline?.length ?? 0) > 48 ? '…' : '')}
               font="11px JetBrains Mono, monospace" fillColor={LABEL_FILL} style={LabelStyle.FILL_AND_OUTLINE}
               outlineColor={DARK} outlineWidth={3} showBackground backgroundColor={LABEL_BG} backgroundPadding={LABEL_PAD}
-              pixelOffset={LABEL_OFFSET} distanceDisplayCondition={LABEL_DDC} disableDepthTestDistance={INF} />
+              pixelOffset={LABEL_OFFSET} distanceDisplayCondition={LABEL_DDC} disableDepthTestDistance={LABEL_DEPTH_DISABLE_DIST} />
           )}
         </Entity>
       ))}
