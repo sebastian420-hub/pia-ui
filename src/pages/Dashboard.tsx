@@ -15,6 +15,8 @@ import type { BasemapId } from '../lib/basemaps';
 import StatusBar from '../components/frame/StatusBar';
 import LayerRail from '../components/frame/LayerRail';
 import type { LayerId } from '../components/frame/LayerRail';
+import WebLayer, { type WebPickNode } from '../components/globe/WebLayer';
+import { tierForHeight, webLinkFromEntityId, type WebTier } from '../components/globe/webTier';
 import { Network as NetworkIcon } from 'lucide-react';
 import LiveTicker from '../components/hud/LiveTicker';
 import WebView from '../components/hud/WebView';
@@ -24,7 +26,7 @@ import FilterBar from '../components/hud/FilterBar';
 import TerminalLog from '../components/hud/TerminalLog';
 import AICopilot from '../components/hud/AICopilot';
 import DocumentUploader from '../components/hud/DocumentUploader';
-import type { IntelligenceEvent, ClusterRow, ArchiveRecord, LayerCount, Sensor, Selection, KgEvent, EntitySummary } from '../lib/types';
+import type { IntelligenceEvent, ClusterRow, ArchiveRecord, LayerCount, Sensor, Selection, KgEvent, EntitySummary, WebOverview, WebWindow } from '../lib/types';
 import { apiFetch, liveSocketUrl } from '../lib/api';
 import { DOMAINS } from '../lib/domains';
 
@@ -38,13 +40,19 @@ function archiveToEvent(r: ArchiveRecord): IntelligenceEvent {
   return { uid: r.uid, source_type: r.source_type, priority: r.priority, domain: r.domain, headline: r.content_headline, created_at: r.created_at, geo: r.geo ?? null };
 }
 
+const EMPTY_SET = new Set<string>();
+
 function Dashboard() {
   const [events, setEvents] = useState<IntelligenceEvent[]>([]);
   const [clusters, setClusters] = useState<ClusterData[]>([]);
   const [strategicEntities, setStrategicEntities] = useState<IntelligenceEvent[]>([]);
   const [cameras, setCameras] = useState<Sensor[]>([]);
   const [layerCounts, setLayerCounts] = useState<LayerCount[]>([]);
-  const [layers, setLayers] = useState<Record<LayerId, boolean>>({ reports: true, entities: true, situations: true, cameras: true, events: true });
+  const [layers, setLayers] = useState<Record<LayerId, boolean>>({ web: true, reports: true, entities: true, situations: true, cameras: true, events: true });
+  const [webOverview, setWebOverview] = useState<WebOverview | null>(null);
+  const [webWindow, setWebWindow] = useState<WebWindow>('7d');
+  const [webKinds, setWebKinds] = useState({ hostile: true, cooperative: true });
+  const [webTier, setWebTier] = useState<WebTier>(0);
   const [kgEvents, setKgEvents] = useState<KgEvent[]>([]);
   const [searchHits, setSearchHits] = useState<EntitySummary[]>([]);
   const [activeGraphEntity, setActiveGraphEntity] = useState<string | null>(null);
@@ -175,6 +183,18 @@ function Dashboard() {
     if (layers.cameras) loadCameras(q);
   }, [layers.entities, layers.cameras, loadStrategic, loadCameras]);
 
+  useEffect(() => {
+    if (!layers.web) return;
+    let cancelled = false;
+    const load = async () => {
+      const r = await apiFetch<WebOverview>(`/api/v1/kg/web/overview?window=${webWindow}&min_events=3&limit=400`);
+      if (!cancelled && r.status === 'success' && r.data) setWebOverview(r.data);
+    };
+    load();
+    const t = setInterval(load, 300_000);
+    return () => { cancelled = true; clearInterval(t); };
+  }, [layers.web, webWindow]);
+
   const handleCameraMoveEnd = useCallback(() => {
     let viewer: CesiumViewer | undefined;
     try { viewer = viewerRef.current?.cesiumElement; } catch { viewer = undefined; }
@@ -187,6 +207,8 @@ function Dashboard() {
         if (maxLon < minLon) maxLon += 360;
         bboxRef.current = `minLat=${minLat}&minLon=${minLon}&maxLat=${maxLat}&maxLon=${maxLon}`;
       }
+      const h = viewer.camera.positionCartographic.height;
+      setWebTier(prev => { const t = tierForHeight(h); return t === prev ? prev : t; });
     }
     refreshViewport();
   }, [refreshViewport]);
@@ -227,6 +249,7 @@ function Dashboard() {
     const picked = viewer.scene.pick(movement.position);
     if (!picked) return;
     const id = picked.id;
+    if (id && typeof id === 'object' && 'web_node' in id) { selectEntity((id as WebPickNode).web_node); return; }
     if (id && typeof id === 'object' && 'sensor_id' in id) { selectCamera((id as Sensor).sensor_id); return; }
     if (id && typeof id === 'object' && 'event_id' in id) {
       const ev = id as KgEvent;
@@ -235,13 +258,21 @@ function Dashboard() {
       return;
     }
     if (id instanceof CesiumEntity && typeof id.id === 'string') {
+      const pair = webLinkFromEntityId(id.id);
+      if (pair) { selectEvidence(pair[0], pair[1]); return; }
       if (id.id.startsWith('report:')) {
         const uid = id.id.slice(7);
         const ev = events.find(e => e.uid === uid);
         if (ev) selectReport(ev, false);
       }
     }
-  }, [events, selectCamera, selectReport, openReportByUid, selectEntity]);
+  }, [events, selectCamera, selectReport, openReportByUid, selectEntity, selectEvidence]);
+
+  const webArcs = useMemo(() => {
+    if (!webOverview) return 0;
+    const min = webTier === 0 ? 20 : webTier === 1 ? 5 : 1;
+    return webOverview.links.filter(l => l.event_count >= min).length;
+  }, [webOverview, webTier]);
 
   const toggleDomain = (d: string) => setActiveDomains(p => p.includes(d) ? p.filter(x => x !== d) : [...p, d]);
   const toggleLayer = (id: LayerId) => setLayers(p => ({ ...p, [id]: !p[id] }));
@@ -295,7 +326,9 @@ function Dashboard() {
       {/* Main frame: rail · globe · inspector */}
       <div className="flex-1 min-h-0 grid" style={{ gridTemplateColumns: `300px 1fr ${inspectorOpen ? '380px' : '0px'}` }}>
         <aside className="min-h-0 flex flex-col bg-bg-1 border-r border-line">
-          <LayerRail counts={layerCounts} enabled={layers} onToggle={toggleLayer} />
+          <LayerRail counts={layerCounts} enabled={layers} onToggle={toggleLayer}
+            web={{ window: webWindow, onWindow: setWebWindow, hostile: webKinds.hostile, cooperative: webKinds.cooperative,
+                   onKind: (k) => setWebKinds(p => ({ ...p, [k]: !p[k] })), arcs: webArcs }} />
           <LiveTicker events={filteredEvents} selectedUid={selectedUid} onEventClick={(e) => selectReport(e)} />
         </aside>
 
@@ -313,6 +346,8 @@ function Dashboard() {
               <ScreenSpaceEvent action={handlePick as unknown as (e: unknown) => void} type={ScreenSpaceEventType.LEFT_CLICK} />
             </ScreenSpaceEventHandler>
 
+            {layers.web && <WebLayer data={webOverview} tier={webTier} showHostile={webKinds.hostile} showCooperative={webKinds.cooperative}
+              topicsOff={EMPTY_SET} selectedId={selection?.kind === 'entity' ? selection.key : null} />}
             {layers.entities && <WatchedEntityLayer entities={strategicEntities} />}
             {layers.cameras && <CameraLayer cameras={cameras} />}
             {layers.events && <EventLayer events={kgEvents} />}

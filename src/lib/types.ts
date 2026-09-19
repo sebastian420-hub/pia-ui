@@ -208,3 +208,15 @@ export interface GraphLink {
 }
 
 export interface GraphData { root?: string; nodes: GraphNode[]; links: GraphLink[] }
+
+/** GET /kg/web/overview — the web from far away, for the globe. */
+export interface WebOverviewNode {
+  id: string; qid: string | null; name: string; kind: EntityKind;
+  lat: number | null; lon: number | null; orbits: boolean; country_id: string | null; activity: number;
+}
+export interface WebOverviewLink {
+  source: string; target: string; event_count: number; hostile_n: number; coop_n: number;
+  kind: 'HOSTILE' | 'COOPERATIVE'; topics: TopicCount[]; outlets: string[]; last_seen: string | null;
+}
+export interface WebOverview { window: '24h' | '7d' | '30d' | '90d'; nodes: WebOverviewNode[]; links: WebOverviewLink[] }
+export type WebWindow = WebOverview['window'];
