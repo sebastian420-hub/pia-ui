@@ -13,7 +13,7 @@ const WebWorkspace: React.FC<Props> = ({ entityKey, onClose }) => {
   const [rootId, setRootId] = useState<string | null>(null);
   return (
     <div className="absolute inset-0 z-40 bg-bg-0 grid" style={{ gridTemplateColumns: `1fr ${selection ? '380px' : '0px'}` }}>
-      <div className="relative min-w-0">
+      <div className="relative min-w-0 overflow-hidden">
         <WebView ref={webRef} entityKey={entityKey} selectedId={selection?.kind === 'entity' ? selection.key : null}
           onClose={onClose} onSelectEntity={(id) => { if (id) setSelection({ kind: 'entity', key: id }); }}
           onSelectEvidence={(a, b) => setSelection({ kind: 'evidence', a, b })} onRootChange={setRootId} />
