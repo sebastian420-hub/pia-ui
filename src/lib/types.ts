@@ -88,9 +88,12 @@ export interface EntitySummary {
   score?: number;
 }
 
+export interface TopicCount { topic: string; count: number }
+
 export interface RelationEntry {
   sources?: string[];
   actions?: string[];
+  topics?: TopicCount[];
   entity_id: string;
   qid: string | null;
   name: string;
@@ -118,6 +121,10 @@ export interface KgEvent {
   event_time: string;
   time_precision?: string;
   action: string;
+  kind?: string | null;
+  topic?: string | null;
+  code?: string | null;
+  coded_as?: string | null;
   confidence: number;
   tone: number | null;
   quote: string | null;
@@ -133,7 +140,7 @@ export interface KgEvent {
 
 export interface RelationEvidence {
   a: EntitySummary; b: EntitySummary;
-  relations: { kind: RelationKind; source: string; label: string | null; event_count: number; weight: number; first_seen: string | null; last_seen: string | null }[];
+  relations: { kind: RelationKind; source: string; label: string | null; event_count: number; weight: number; first_seen: string | null; last_seen: string | null; topics?: TopicCount[] }[];
   events: (KgEvent & { source_url?: string | null })[];
   shared_reports: { uid: string; content_headline: string; created_at: string; source_id: string }[];
 }
@@ -194,6 +201,7 @@ export interface GraphLink {
   event_count?: number;
   weight?: number;
   outlets?: string[];
+  topics?: TopicCount[];
   first_seen?: string | null;
   last_seen?: string | null;
   reasoning?: string | null;

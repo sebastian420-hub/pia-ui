@@ -29,6 +29,15 @@ const DEFAULT_KINDS: Record<RelationKind, boolean> = {
 };
 const idOf = (x: string | GraphNode | N | undefined): string => (typeof x === 'object' && x ? String(x.id) : String(x));
 const pairKey = (l: GraphLink) => [idOf(l.source), idOf(l.target)].sort().join('|');
+const NODE_LEGEND: [string, string][] = [['COUNTRY', KIND_HEX.COUNTRY], ['ORG', KIND_HEX.ORG], ['PERSON', KIND_HEX.PERSON], ['PLACE', KIND_HEX.PLACE], ['VESSEL', KIND_HEX.VESSEL]];
+// Sectors: where a neighbour sits around its hub, by the kind of relation. Hostile left,
+// cooperative right, roles and ownership below, Wikidata facts (membership / located) above.
+const SECTOR_ANGLE: Record<RelationKind, number> = {
+  HOSTILE: Math.PI, COOPERATIVE: 0, ROLE: Math.PI / 2, OWNERSHIP: Math.PI / 2,
+  MEMBERSHIP: -Math.PI / 2, LOCATED: -Math.PI / 2, MENTIONED_WITH: -Math.PI / 2,
+};
+const SECTOR_RADIUS = 230;
+const ALWAYS_LABELLED = 12;   // top nodes by weight keep their label at any zoom
 
 /**
  * The web: entities and the relations between them.
@@ -48,6 +57,7 @@ const WebView = forwardRef<WebViewHandle, Props>(function WebView(
   const [kinds, setKinds] = useState<Record<RelationKind, boolean>>(DEFAULT_KINDS);
   const [showFacts, setShowFacts] = useState(true);
   const [minEvents, setMinEvents] = useState(1);
+  const [topicsOff, setTopicsOff] = useState<Set<string>>(new Set());
   const [hover, setHover] = useState<N | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [size, setSize] = useState({ w: 800, h: 600 });
@@ -112,20 +122,13 @@ const WebView = forwardRef<WebViewHandle, Props>(function WebView(
 
   useImperativeHandle(ref, () => ({ expand, focus: (id) => root(id, true) }), [expand, root]);
 
-  // Layout: enough repulsion to read labels; fit once settled.
-  useEffect(() => {
-    const fg = fgRef.current;
-    if (!fg) return;
-    fg.d3Force('charge')?.strength(-320);
-    fg.d3Force('link')?.distance((l: L) => (l.origin === 'events' ? 80 : 110));
-  }, [data]);
-
   // ── filtering ────────────────────────────────────────────────────────────
   const visible = useMemo(() => {
     const links = data.links.filter(l => {
       if (!kinds[l.kind ?? 'MENTIONED_WITH']) return false;
       if (l.origin === 'wikidata' && !showFacts) return false;
       if (l.origin === 'events' && (l.event_count ?? 0) < minEvents) return false;
+      if (topicsOff.size && l.origin === 'events' && l.topics?.length && l.topics.every(t => topicsOff.has(t.topic))) return false;
       return true;
     });
     const keep = new Set<string>(links.flatMap(l => [idOf(l.source), idOf(l.target)]));
@@ -140,7 +143,43 @@ const WebView = forwardRef<WebViewHandle, Props>(function WebView(
       return { ...l, curvature: n === 0 ? 0 : (n % 2 ? 0.25 : -0.25) * Math.ceil(n / 2) };
     });
     return { nodes: data.nodes.filter(n => keep.has(n.id)), links: curved };
-  }, [data, kinds, showFacts, minEvents, rootId, selectedId]);
+  }, [data, kinds, showFacts, minEvents, topicsOff, rootId, selectedId]);
+
+  /** Topics present on the visible event edges, most frequent first (for the filter row). */
+  const topicChips = useMemo(() => {
+    const count = new Map<string, number>();
+    data.links.forEach(l => l.topics?.forEach(t => { if (t.topic !== 'other') count.set(t.topic, (count.get(t.topic) ?? 0) + t.count); }));
+    return [...count.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10);
+  }, [data.links]);
+
+  /** Nodes that always carry a label: root, selection, its neighbours, and the top N by weight. */
+  const labelled = useMemo(() => {
+    const s = new Set<string>();
+    [...visible.nodes].sort((a, b) => (b.val ?? 0) - (a.val ?? 0)).slice(0, ALWAYS_LABELLED).forEach(n => s.add(n.id));
+    return s;
+  }, [visible.nodes]);
+
+  /** Sector target per node: the mean direction of its relation kinds to the hub it hangs from. */
+  const sectorOf = useMemo(() => {
+    const hubs = new Set<string>(expanded);
+    if (rootId) hubs.add(rootId);
+    const acc = new Map<string, { x: number; y: number; hub: string }>();
+    visible.links.forEach(l => {
+      const a = idOf(l.source), b = idOf(l.target);
+      const kind = (l.kind ?? 'MENTIONED_WITH') as RelationKind;
+      const ang = SECTOR_ANGLE[kind] ?? 0;
+      const add = (node: string, hub: string) => {
+        if (hubs.has(node)) return;
+        const cur = acc.get(node) ?? { x: 0, y: 0, hub };
+        acc.set(node, { x: cur.x + Math.cos(ang), y: cur.y + Math.sin(ang), hub: cur.hub });
+      };
+      if (hubs.has(a)) add(b, a);
+      if (hubs.has(b)) add(a, b);
+    });
+    const out = new Map<string, { angle: number; hub: string }>();
+    acc.forEach((v, id) => out.set(id, { angle: Math.atan2(v.y, v.x), hub: v.hub }));
+    return out;
+  }, [visible.links, expanded, rootId]);
 
   const neighbours = useMemo(() => {
     const s = new Set<string>();
@@ -152,6 +191,33 @@ const WebView = forwardRef<WebViewHandle, Props>(function WebView(
     });
     return s;
   }, [visible.links, selectedId]);
+
+  // Layout: enough repulsion to read labels; a sector force pulls each neighbour towards the
+  // side its relation kind belongs to (hostile left, cooperative right …); fit once settled.
+  const sectorRef = useRef(sectorOf);
+  sectorRef.current = sectorOf;
+  useEffect(() => {
+    const fg = fgRef.current;
+    if (!fg) return;
+    fg.d3Force('charge')?.strength(-260);
+    fg.d3Force('link')?.distance((l: L) => (l.origin === 'events' ? 90 : 120)).strength(0.25);
+    let nodes: N[] = [];
+    const sector = (alpha: number) => {
+      const byId = new Map(nodes.map(n => [String(n.id), n]));
+      nodes.forEach(n => {
+        const s = sectorRef.current.get(String(n.id));
+        if (!s) return;
+        const hub = byId.get(s.hub);
+        const hx = hub?.x ?? 0, hy = hub?.y ?? 0;
+        const tx = hx + Math.cos(s.angle) * SECTOR_RADIUS, ty = hy + Math.sin(s.angle) * SECTOR_RADIUS;
+        n.vx = (n.vx ?? 0) + (tx - (n.x ?? 0)) * 0.12 * alpha;
+        n.vy = (n.vy ?? 0) + (ty - (n.y ?? 0)) * 0.12 * alpha;
+      });
+    };
+    (sector as unknown as { initialize: (ns: N[]) => void }).initialize = (ns: N[]) => { nodes = ns; };
+    fg.d3Force('sector', sector as never);
+    fg.d3ReheatSimulation();
+  }, [data, visible.links.length]);
 
   // ── drawing ──────────────────────────────────────────────────────────────
   const drawNode = useCallback((node: N, ctx: CanvasRenderingContext2D, scale: number) => {
@@ -169,7 +235,7 @@ const WebView = forwardRef<WebViewHandle, Props>(function WebView(
       ctx.strokeStyle = isSel ? '#ffffff' : '#e6e9ed';
       ctx.stroke();
     }
-    const showLabel = isRoot || isSel || isNb || hover?.id === node.id || visible.nodes.length <= 20 || scale > 1.8;
+    const showLabel = isRoot || isSel || isNb || hover?.id === node.id || labelled.has(node.id) || visible.nodes.length <= 20 || scale > 1.8;
     if (showLabel) {
       const fontSize = Math.max(11 / scale, 3);
       ctx.font = `${isRoot || isSel ? '600 ' : ''}${fontSize}px JetBrains Mono, monospace`;
@@ -183,7 +249,7 @@ const WebView = forwardRef<WebViewHandle, Props>(function WebView(
       ctx.fillText(label, x, y + r + 2 / scale);
     }
     ctx.globalAlpha = 1;
-  }, [rootId, selectedId, neighbours, hover, visible.nodes.length]);
+  }, [rootId, selectedId, neighbours, hover, labelled, visible.nodes.length]);
 
   const linkColor = useCallback((l: L) => {
     const base = RELATION_HEX[l.kind ?? ''] ?? '#4b5563';
@@ -240,6 +306,24 @@ const WebView = forwardRef<WebViewHandle, Props>(function WebView(
         </div>
       </div>
 
+      {/* second row: what the nodes are, and what the relations are about */}
+      <div className="px-3 py-1 border-b border-line flex items-center gap-2 flex-wrap text-[10px]">
+        <span className="text-text-3 tracking-[0.15em]">NODES</span>
+        {NODE_LEGEND.map(([k, hex]) => (
+          <span key={k} className="text-text-2"><span className="inline-block w-2 h-2 rounded-full align-middle mr-1" style={{ background: hex }} />{k.toLowerCase()}</span>
+        ))}
+        {topicChips.length > 0 && <>
+          <span className="text-text-3 tracking-[0.15em] ml-3">ABOUT</span>
+          {topicChips.map(([t, n]) => (
+            <button key={t} onClick={() => setTopicsOff(p => { const s = new Set(p); if (s.has(t)) s.delete(t); else s.add(t); return s; })}
+              className={`px-1.5 py-0.5 rounded border ${topicsOff.has(t) ? 'border-transparent text-text-3 line-through' : 'border-line bg-bg-3 text-text-1'}`}>
+              {t.replace('_', ' ')} <span className="text-text-3">{n}</span>
+            </button>
+          ))}
+        </>}
+        <span className="ml-auto text-text-3">hostile ← · → cooperative · roles ↓ · facts ↑</span>
+      </div>
+
       <div className="flex-1 relative min-h-0" ref={wrapRef}>
         {error && <div className="absolute inset-0 flex items-center justify-center text-err z-10">{error}</div>}
         {!error && visible.nodes.length === 0 && data.nodes.length > 0 && (
@@ -259,7 +343,10 @@ const WebView = forwardRef<WebViewHandle, Props>(function WebView(
           linkLineDash={linkDash}
           linkCurvature="curvature"
           linkHoverPrecision={10}
-          linkLabel={(l: L) => `${(l.kind ?? '').toLowerCase()} · ${l.label}${l.event_count ? ` · ${l.event_count} events` : ''}${l.outlets?.length ? ` · ${l.outlets.join(', ')}` : ''}`}
+          linkLabel={(l: L) => {
+            const about = l.topics?.length ? l.topics.slice(0, 2).map(t => `${t.topic.replace('_', ' ')} ${t.count}`).join(', ') : l.label;
+            return `${(l.kind ?? '').toLowerCase()} · ${about}${l.event_count ? ` · ${l.event_count} events` : ''}${l.outlets?.length ? ` · ${l.outlets.slice(0, 3).join(', ')}` : ''}`;
+          }}
           onNodeClick={handleNodeClick}
           onNodeRightClick={(n: N) => expand(n.id)}
           onNodeHover={(n: N | null) => setHover(n)}

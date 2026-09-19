@@ -20,12 +20,18 @@ const ORDER: RelationKind[] = ['HOSTILE', 'COOPERATIVE', 'ROLE', 'OWNERSHIP', 'M
 
 /** The "who is who" card: identity, trend, connections by kind, recent events and reports. */
 /** "27 attacks reported (bbc.co.uk, gdelt) since 12 Sep" — the sentence behind a connection. */
-function relationSentence(r: { source: string; label: string | null; event_count: number; weight: number; first_seen: string | null; sources?: string[]; actions?: string[] }): string {
+function relationSentence(r: { source: string; label: string | null; event_count: number; weight: number; first_seen: string | null; sources?: string[]; actions?: string[]; topics?: { topic: string; count: number }[] }): string {
   if (r.source === 'wikidata') return `${r.label ?? 'fact'}${r.weight < 1 ? ' · former' : ''} · Wikidata`;
   if (r.source === 'cooccurrence') return `mentioned together in ${r.event_count} report${r.event_count === 1 ? '' : 's'}`;
-  const what = (r.actions && r.actions.length ? r.actions.map(a => a.toLowerCase()).slice(0, 3).join('/') : r.label ?? 'event');
   const since = r.first_seen ? ` since ${new Date(r.first_seen).toISOString().slice(5, 10).replace('-', '/')}` : '';
   const src = r.sources && r.sources.length ? ` (${r.sources.slice(0, 3).join(', ')}${r.sources.length > 3 ? ', …' : ''})` : '';
+  // "diplomacy (26) · military (19)" — what it is about; fall back to the verbs when no topic is known
+  const topics = (r.topics ?? []).filter(t => t.topic !== 'other');
+  if (topics.length) {
+    const what = topics.slice(0, 3).map(t => `${t.topic.replace('_', ' ')} (${t.count})`).join(' · ');
+    return `${what} — ${r.event_count} event${r.event_count === 1 ? '' : 's'}${src}${since}`;
+  }
+  const what = (r.actions && r.actions.length ? r.actions.map(a => a.toLowerCase().replace('_', ' ')).slice(0, 3).join('/') : r.label ?? 'event');
   return `${r.event_count} ${what} event${r.event_count === 1 ? '' : 's'}${src}${since}`;
 }
 

@@ -51,7 +51,12 @@ const EvidencePanel: React.FC<Props> = ({ a, b, onClose, onOpenEntity }) => {
             <span className="text-text-2"> · {r.label ?? r.source}</span>
             {r.source === 'wikidata'
               ? <div className="text-text-3 text-[11px]">Wikidata fact{r.weight < 1 ? ' · former' : ''}</div>
-              : <div className="text-text-3 text-[11px]">{r.event_count} event{r.event_count === 1 ? '' : 's'} · {zuluDateTime(r.first_seen)} → {zuluDateTime(r.last_seen)}</div>}
+              : <div className="text-text-3 text-[11px]">
+                  {r.event_count} event{r.event_count === 1 ? '' : 's'} · {zuluDateTime(r.first_seen)} → {zuluDateTime(r.last_seen)}
+                  {r.topics && r.topics.length > 0 && (
+                    <div className="mt-0.5 text-text-2">{r.topics.map(t => `${t.topic.replace('_', ' ')} ${t.count}`).join(' · ')}</div>
+                  )}
+                </div>}
           </div>
         ))}
 
@@ -62,12 +67,15 @@ const EvidencePanel: React.FC<Props> = ({ a, b, onClose, onOpenEntity }) => {
               {ev.events.map(e => (
                 <div key={e.event_id} className="border border-line rounded px-2 py-1.5">
                   <div className="flex items-center justify-between text-[10px] text-text-3">
-                    <span>{zuluShort(e.event_time)} · {e.source_id ?? e.origin}</span>
-                    <span className={e.tone != null && e.tone < 0 ? 'text-prio-high' : 'text-ok'}>{e.action}</span>
+                    <span>{zuluShort(e.event_time)} · {e.source_id ?? e.origin}{e.topic && e.topic !== 'other' ? ` · ${e.topic.replace('_', ' ')}` : ''}</span>
+                    <span className={e.tone != null && e.tone < 0 ? 'text-prio-high' : 'text-ok'}>{e.action.toLowerCase().replace('_', ' ')}</span>
                   </div>
                   <div className="text-text-2 flex items-center gap-1">{e.actor} <ArrowRight size={10} className="text-text-3" /> {e.target}</div>
                   {e.quote && <div className="text-text-3 italic text-[11px] mt-0.5">“{e.quote}”</div>}
-                  {e.content_headline && <div className="text-text-3 text-[10px] mt-0.5 truncate">{e.content_headline}</div>}
+                  {/* GDELT events carry no quote: the evidence is the headline, the outlet and the CAMEO code */}
+                  {!e.quote && e.content_headline && <div className="text-text-2 text-[11px] mt-0.5">{e.content_headline}</div>}
+                  {e.quote && e.content_headline && <div className="text-text-3 text-[10px] mt-0.5 truncate">{e.content_headline}</div>}
+                  {e.coded_as && <div className="text-text-3 text-[10px] mt-0.5">coded by {e.coded_as}</div>}
                   {e.source_url && <a href={e.source_url} target="_blank" rel="noreferrer" className="text-accent text-[10px] inline-flex items-center gap-1"><ExternalLink size={9} /> source</a>}
                 </div>
               ))}
