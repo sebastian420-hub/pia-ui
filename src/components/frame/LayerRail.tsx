@@ -11,7 +11,8 @@ interface LayerRailProps {
   /** The web layer's small toolbar: time window and kind toggles (shown when the layer is on). */
   web?: {
     window: WebWindow; onWindow: (w: WebWindow) => void;
-    hostile: boolean; cooperative: boolean; onKind: (k: 'hostile' | 'cooperative') => void;
+    hostile: boolean; cooperative: boolean; onKind: (k: 'hostile' | 'cooperative' | 'wire') => void;
+    wire: boolean;
     arcs: number;
   };
 }
@@ -54,6 +55,8 @@ const LayerRail: React.FC<LayerRailProps> = ({ counts, enabled, onToggle, web })
                     <span className="inline-block w-2.5 h-0.5 align-middle mr-1 bg-prio-critical" />hostile</button>
                   <button onClick={() => web.onKind('cooperative')} className={`px-1.5 py-0.5 rounded border ${web.cooperative ? 'border-line bg-bg-3 text-text-1' : 'border-transparent text-text-3'}`}>
                     <span className="inline-block w-2.5 h-0.5 align-middle mr-1 bg-ok" />coop</button>
+                  <button onClick={() => web.onKind('wire')} title="also show pairs only the wire (GDELT) reports — unverified, faint"
+                    className={`px-1.5 py-0.5 rounded border ${web.wire ? 'border-line bg-bg-3 text-text-1' : 'border-transparent text-text-3'}`}>wire</button>
                 </div>
               )}
             </li>

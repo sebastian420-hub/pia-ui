@@ -154,6 +154,8 @@ const WebView = forwardRef<WebViewHandle, Props>(function WebView(
       if (l.kind === 'COOPERATIVE') cur.coop_n = (cur.coop_n ?? 0) + (l.event_count ?? 0);
       if ((l.weight ?? 0) > (cur.weight ?? 0)) Object.assign(cur, { kind: l.kind, label: l.label, weight: l.weight, topics: l.topics, outlets: l.outlets });
       cur.event_count = (cur.event_count ?? 0) + (l.event_count ?? 0);
+      cur.verified_count = (cur.verified_count ?? 0) + (l.verified_count ?? 0);
+      cur.wire_count = (cur.wire_count ?? 0) + (l.wire_count ?? 0);
     };
     fans.forEach((d, anchorId) => {
       const anchor = pos.get(anchorId);
@@ -235,8 +237,12 @@ const WebView = forwardRef<WebViewHandle, Props>(function WebView(
     const a = String(s.id), b = String(t.id);
     const touches = !dimOthers || a === selectedId || b === selectedId;
     const hot = hover && (a === hover || b === hover);
-    const alpha = touches ? (hot ? 1 : 0.85) : 0.18;
-    const width = l.origin === 'events' ? Math.max(1.2, Math.min(7, 1 + Math.log2(1 + (l.event_count ?? 1)) * 1.3)) : 1;
+    // verified (an article said it) = solid, width from verified events; wire-only = thin and faint
+    const verified = (l.verified_count ?? 0) > 0;
+    const alpha = (touches ? (hot ? 1 : 0.85) : 0.18) * (l.origin === 'events' && !verified ? 0.5 : 1);
+    const width = l.origin === 'events'
+      ? (verified ? Math.max(1.5, Math.min(7, 1.2 + Math.log2(1 + (l.verified_count ?? 1)) * 1.5)) : 1)
+      : 1;
     const dash = l.origin === 'wikidata' ? [6, 4] : l.origin === 'cooccurrence' ? [2, 3] : [];
     const strokes: [string, number][] = [];
     if ((l.hostile_n ?? 0) > 0 && (l.coop_n ?? 0) > 0) {
@@ -333,7 +339,8 @@ const WebView = forwardRef<WebViewHandle, Props>(function WebView(
             linkLabel={(l: L) => {
               const about = l.topics?.length ? l.topics.slice(0, 2).map(t => `${t.topic.replace('_', ' ')} ${t.count}`).join(', ') : l.label;
               const both = (l.hostile_n ?? 0) > 0 && (l.coop_n ?? 0) > 0 ? ` · ${l.coop_n} cooperative / ${l.hostile_n} hostile` : '';
-              return `${about}${both}${l.event_count ? ` · ${l.event_count} events` : ''}${l.outlets?.length ? ` · ${l.outlets.slice(0, 3).join(', ')}` : ''}`;
+              const v = l.origin === 'events' ? ` · ${l.verified_count ?? 0} verified · ${l.wire_count ?? 0} wire` : '';
+              return `${about}${both}${v}${l.outlets?.length ? ` · ${l.outlets.slice(0, 3).join(', ')}` : ''}`;
             }}
             onNodeClick={handleNodeClick}
             onNodeRightClick={(n: N) => expand(String(n.id))}
@@ -346,7 +353,7 @@ const WebView = forwardRef<WebViewHandle, Props>(function WebView(
             ))}
           </div>
           <div className="absolute bottom-2 left-3 text-[10px] text-text-3 pointer-events-none">
-            hostile ← · → cooperative · roles ↓ · facts ↑ · click: details · double-click: expand · click a line: evidence · dashed = Wikidata
+            hostile ← · → cooperative · roles ↓ · facts ↑ · solid = verified by an article · faint = wire only · dashed = Wikidata · click a line: evidence
           </div>
         </div>
       </div>

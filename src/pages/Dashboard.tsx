@@ -51,7 +51,7 @@ function Dashboard() {
   const [layers, setLayers] = useState<Record<LayerId, boolean>>({ web: true, reports: true, entities: true, situations: true, cameras: true, events: true });
   const [webOverview, setWebOverview] = useState<WebOverview | null>(null);
   const [webWindow, setWebWindow] = useState<WebWindow>('7d');
-  const [webKinds, setWebKinds] = useState({ hostile: true, cooperative: true });
+  const [webKinds, setWebKinds] = useState({ hostile: true, cooperative: true, wire: false });
   const [webTier, setWebTier] = useState<WebTier>(0);
   const [kgEvents, setKgEvents] = useState<KgEvent[]>([]);
   const [searchHits, setSearchHits] = useState<EntitySummary[]>([]);
@@ -272,8 +272,10 @@ function Dashboard() {
     if (!webOverview) return 0;
     const min = webTier === 0 ? 20 : webTier === 1 ? 5 : 1;
     return webOverview.links.filter(l => {
-      const shown = (webKinds.hostile ? l.hostile_n : 0) + (webKinds.cooperative ? l.coop_n : 0);
-      return shown > 0 && l.event_count >= min;
+      const verified = (l.verified_count ?? 0) > 0;
+      if (!verified && !webKinds.wire) return false;
+      const shown = (webKinds.hostile ? (verified ? l.v_hostile_n : l.hostile_n) : 0) + (webKinds.cooperative ? (verified ? l.v_coop_n : l.coop_n) : 0);
+      return shown > 0 && (verified || l.event_count >= min);
     }).length;
   }, [webOverview, webTier, webKinds]);
 
@@ -330,7 +332,7 @@ function Dashboard() {
       <div className="flex-1 min-h-0 grid" style={{ gridTemplateColumns: `300px 1fr ${inspectorOpen ? '380px' : '0px'}` }}>
         <aside className="min-h-0 flex flex-col bg-bg-1 border-r border-line">
           <LayerRail counts={layerCounts} enabled={layers} onToggle={toggleLayer}
-            web={{ window: webWindow, onWindow: setWebWindow, hostile: webKinds.hostile, cooperative: webKinds.cooperative,
+            web={{ window: webWindow, onWindow: setWebWindow, hostile: webKinds.hostile, cooperative: webKinds.cooperative, wire: webKinds.wire,
                    onKind: (k) => setWebKinds(p => ({ ...p, [k]: !p[k] })), arcs: webArcs }} />
           <LiveTicker events={filteredEvents} selectedUid={selectedUid} onEventClick={(e) => selectReport(e)} />
         </aside>
@@ -350,7 +352,7 @@ function Dashboard() {
             </ScreenSpaceEventHandler>
 
             {layers.web && <WebLayer data={webOverview} tier={webTier} showHostile={webKinds.hostile} showCooperative={webKinds.cooperative}
-              topicsOff={EMPTY_SET} selectedId={selection?.kind === 'entity' ? selection.key : null} />}
+              showWire={webKinds.wire} topicsOff={EMPTY_SET} selectedId={selection?.kind === 'entity' ? selection.key : null} />}
             {layers.entities && <WatchedEntityLayer entities={strategicEntities} />}
             {layers.cameras && <CameraLayer cameras={cameras} />}
             {layers.events && <EventLayer events={kgEvents} />}

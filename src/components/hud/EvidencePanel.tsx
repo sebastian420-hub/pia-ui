@@ -5,6 +5,8 @@ import { zuluDateTime, zuluShort } from '../../lib/format';
 import { RELATION_HEX } from '../../lib/symbology';
 import type { RelationEvidence } from '../../lib/types';
 
+type EvEvent = RelationEvidence['events'][number];
+
 interface Props {
   a: string;
   b: string;
@@ -52,7 +54,9 @@ const EvidencePanel: React.FC<Props> = ({ a, b, onClose, onOpenEntity }) => {
             {r.source === 'wikidata'
               ? <div className="text-text-3 text-[11px]">Wikidata fact{r.weight < 1 ? ' · former' : ''}</div>
               : <div className="text-text-3 text-[11px]">
-                  {r.event_count} event{r.event_count === 1 ? '' : 's'} · {zuluDateTime(r.first_seen)} → {zuluDateTime(r.last_seen)}
+                  {(r.verified_count ?? 0) > 0 ? <span className="text-ok">{r.verified_count} verified</span> : <span>wire only</span>}
+                  {(r.wire_count ?? 0) > 0 && <span> · {r.wire_count} wire</span>}
+                  {' · '}{zuluDateTime(r.first_seen)} → {zuluDateTime(r.last_seen)}
                   {r.topics && r.topics.length > 0 && (
                     <div className="mt-0.5 text-text-2">{r.topics.map(t => `${t.topic.replace('_', ' ')} ${t.count}`).join(' · ')}</div>
                   )}
@@ -60,11 +64,11 @@ const EvidencePanel: React.FC<Props> = ({ a, b, onClose, onOpenEntity }) => {
           </div>
         ))}
 
-        {ev && ev.events.length > 0 && (
-          <section>
-            <h3 className="text-[10px] tracking-[0.2em] text-text-3 mb-1">EVENTS</h3>
-            <div className="space-y-1.5">
-              {ev.events.map(e => (
+        {ev && ev.events.length > 0 && [['VERIFIED — WHAT AN ARTICLE SAID', ev.events.filter(e => e.origin !== 'gdelt')], ['WIRE SIGNALS — GDELT GUESSES, NOT READ', ev.events.filter(e => e.origin === 'gdelt')]].filter(([, list]) => (list as EvEvent[]).length > 0).map(([title, list]) => (
+          <section key={title as string}>
+            <h3 className={`text-[10px] tracking-[0.2em] mb-1 ${(title as string).startsWith('VERIFIED') ? 'text-ok' : 'text-text-3'}`}>{title as string} · {(list as EvEvent[]).length}</h3>
+            <div className={`space-y-1.5 ${(title as string).startsWith('VERIFIED') ? '' : 'opacity-70'}`}>
+              {(list as EvEvent[]).map(e => (
                 <div key={e.event_id} className="border border-line rounded px-2 py-1.5">
                   <div className="flex items-center justify-between text-[10px] text-text-3">
                     <span>{zuluShort(e.event_time)} · {e.source_id ?? e.origin}{e.topic && e.topic !== 'other' ? ` · ${e.topic.replace('_', ' ')}` : ''}</span>
@@ -75,13 +79,13 @@ const EvidencePanel: React.FC<Props> = ({ a, b, onClose, onOpenEntity }) => {
                   {/* GDELT events carry no quote: the evidence is the headline, the outlet and the CAMEO code */}
                   {!e.quote && e.content_headline && <div className="text-text-2 text-[11px] mt-0.5">{e.content_headline}</div>}
                   {e.quote && e.content_headline && <div className="text-text-3 text-[10px] mt-0.5 truncate">{e.content_headline}</div>}
-                  {e.coded_as && <div className="text-text-3 text-[10px] mt-0.5">coded by {e.coded_as}</div>}
+                  {e.coded_as && <div className="text-text-3 text-[10px] mt-0.5">coded by {e.coded_as}{e.outlets && e.outlets.length > 1 ? ` · ${e.outlets.length} outlets` : ''}</div>}
                   {e.source_url && <a href={e.source_url} target="_blank" rel="noreferrer" className="text-accent text-[10px] inline-flex items-center gap-1"><ExternalLink size={9} /> source</a>}
                 </div>
               ))}
             </div>
           </section>
-        )}
+        ))}
 
         {ev && ev.shared_reports.length > 0 && (
           <section>

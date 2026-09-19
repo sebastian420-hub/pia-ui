@@ -60,6 +60,8 @@ interface Props {
   tier: WebTier;
   showHostile: boolean;
   showCooperative: boolean;
+  /** Also draw pairs that only the wire (GDELT) reports — faint. Off: verified lines only. */
+  showWire: boolean;
   topicsOff: Set<string>;
   selectedId?: string | null;
 }
@@ -67,30 +69,37 @@ interface Props {
 export interface WebPickNode { web_node: string; name: string }
 
 
-export const WebLayer = React.memo(function WebLayer({ data, tier, showHostile, showCooperative, topicsOff, selectedId }: Props) {
+export const WebLayer = React.memo(function WebLayer({ data, tier, showHostile, showCooperative, showWire, topicsOff, selectedId }: Props) {
   const scene = useMemo(() => {
-    if (!data) return { nodes: [] as (WebOverviewNode & { lon: number; lat: number; size: number })[], links: [] as (WebOverviewLink & { positions: Cartesian3[]; positions2?: Cartesian3[]; width: number; hex: string; hex2?: string })[], labelled: new Set<string>() };
+    if (!data) return { nodes: [] as (WebOverviewNode & { lon: number; lat: number; size: number })[], links: [] as (WebOverviewLink & { verified: boolean; positions: Cartesian3[]; positions2?: Cartesian3[]; width: number; hex: string; hex2?: string })[], labelled: new Set<string>() };
     const rules = TIER_RULES[tier];
     const pos = new Map<string, [number, number]>();
     data.nodes.forEach(n => { if (n.lat != null && n.lon != null) pos.set(n.id, orbit(n)); });
     const links = data.links.filter(l => {
-      if (l.event_count < rules.minEvents) return false;
+      const verified = (l.verified_count ?? 0) > 0;
+      if (!verified && !showWire) return false;
+      // verified pairs always qualify; wire-only pairs need the tier's minimum
+      if (!verified && l.event_count < rules.minEvents) return false;
       if (!pos.has(l.source) || !pos.has(l.target)) return false;
-      if (!((l.hostile_n > 0 && showHostile) || (l.coop_n > 0 && showCooperative))) return false;
+      const h = verified ? l.v_hostile_n : l.hostile_n, c = verified ? l.v_coop_n : l.coop_n;
+      if (!((h > 0 && showHostile) || (c > 0 && showCooperative))) return false;
       if (topicsOff.size && l.topics?.length && l.topics.every(t => topicsOff.has(t.topic))) return false;
       return true;
     }).map(l => {
       const a = pos.get(l.source)!, b = pos.get(l.target)!;
-      // only the kinds that are switched on are drawn: with "coop" off, a mixed pair shows its
+      const verified = (l.verified_count ?? 0) > 0;
+      // verified pairs are drawn from what articles said; wire-only pairs from the wire, faint.
+      // Only the kinds that are switched on are drawn: with "coop" off, a mixed pair shows its
       // hostile stroke alone, sized by its hostile events
-      const h = showHostile ? l.hostile_n : 0, c = showCooperative ? l.coop_n : 0;
+      const h = showHostile ? (verified ? l.v_hostile_n : l.hostile_n) : 0;
+      const c = showCooperative ? (verified ? l.v_coop_n : l.coop_n) : 0;
       const shown = h + c;
-      const width = Math.max(1.5, Math.min(9, 1 + Math.log2(1 + shown) * 1.2));
+      const width = verified ? Math.max(2, Math.min(9, 1.5 + Math.log2(1 + shown) * 1.4)) : Math.max(1, Math.min(3, 0.8 + Math.log2(1 + shown) * 0.5));
       const both = h > 0 && c > 0;
       const main: 'HOSTILE' | 'COOPERATIVE' = h > c ? 'HOSTILE' : 'COOPERATIVE';
       const hex = RELATION_HEX[main];
       const hex2 = both ? RELATION_HEX[main === 'HOSTILE' ? 'COOPERATIVE' : 'HOSTILE'] : undefined;
-      return { ...l, kind: main, positions: arc(a, b), positions2: both ? arc(a, b, 0.045, 25_000) : undefined, width, hex, hex2 };
+      return { ...l, kind: main, verified, positions: arc(a, b), positions2: both ? arc(a, b, 0.045, 25_000) : undefined, width, hex, hex2 };
     });
     const linked = new Set<string>(links.flatMap(l => [l.source, l.target]));
     const nodes = data.nodes
@@ -109,13 +118,13 @@ export const WebLayer = React.memo(function WebLayer({ data, tier, showHostile, 
     }
     if (selectedId) labelled.add(selectedId);
     return { nodes, links, labelled };
-  }, [data, tier, showHostile, showCooperative, topicsOff, selectedId]);
+  }, [data, tier, showHostile, showCooperative, showWire, topicsOff, selectedId]);
 
   return (
     <>
       {scene.links.map(l => {
         const touches = !selectedId || l.source === selectedId || l.target === selectedId;
-        const alpha = touches ? 0.85 : 0.15;
+        const alpha = (touches ? 0.85 : 0.15) * (l.verified ? 1 : 0.45);
         const key = `${l.source}|${l.target}`;
         return (
           <React.Fragment key={key}>

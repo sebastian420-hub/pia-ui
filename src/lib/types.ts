@@ -94,6 +94,9 @@ export interface RelationEntry {
   sources?: string[];
   actions?: string[];
   topics?: TopicCount[];
+  verified_topics?: TopicCount[];
+  verified_count?: number;   // events an article said (origin llm, with a quote)
+  wire_count?: number;       // GDELT story-days behind the pair
   entity_id: string;
   qid: string | null;
   name: string;
@@ -125,6 +128,7 @@ export interface KgEvent {
   topic?: string | null;
   code?: string | null;
   coded_as?: string | null;
+  outlets?: string[] | null;
   confidence: number;
   tone: number | null;
   quote: string | null;
@@ -140,7 +144,7 @@ export interface KgEvent {
 
 export interface RelationEvidence {
   a: EntitySummary; b: EntitySummary;
-  relations: { kind: RelationKind; source: string; label: string | null; event_count: number; weight: number; first_seen: string | null; last_seen: string | null; topics?: TopicCount[] }[];
+  relations: { kind: RelationKind; source: string; label: string | null; event_count: number; weight: number; first_seen: string | null; last_seen: string | null; topics?: TopicCount[]; verified_topics?: TopicCount[]; verified_count?: number; wire_count?: number }[];
   events: (KgEvent & { source_url?: string | null })[];
   shared_reports: { uid: string; content_headline: string; created_at: string; source_id: string }[];
 }
@@ -202,6 +206,9 @@ export interface GraphLink {
   weight?: number;
   outlets?: string[];
   topics?: TopicCount[];
+  verified_topics?: TopicCount[];
+  verified_count?: number;
+  wire_count?: number;
   first_seen?: string | null;
   last_seen?: string | null;
   reasoning?: string | null;
@@ -216,6 +223,7 @@ export interface WebOverviewNode {
 }
 export interface WebOverviewLink {
   source: string; target: string; event_count: number; hostile_n: number; coop_n: number;
+  verified_count: number; wire_count: number; v_hostile_n: number; v_coop_n: number;
   kind: 'HOSTILE' | 'COOPERATIVE'; topics: TopicCount[]; outlets: string[]; last_seen: string | null;
 }
 export interface WebOverview { window: '24h' | '7d' | '30d' | '90d'; nodes: WebOverviewNode[]; links: WebOverviewLink[] }

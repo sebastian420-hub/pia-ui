@@ -30,7 +30,7 @@ const PartnerList: React.FC<Props> = ({ partners, nodes, selectedId, hoverId, on
     list.sort((a, b) => {
       if (sort === 'name') return a.n!.name.localeCompare(b.n!.name);
       if (sort === 'recent') return lastSeen(b.p) - lastSeen(a.p);
-      return b.p.events - a.p.events || b.p.weight - a.p.weight;
+      return b.p.verified - a.p.verified || b.p.events - a.p.events || b.p.weight - a.p.weight;   // verified first
     });
     return list;
   }, [partners, nodes, q, sort]);
@@ -68,9 +68,9 @@ const PartnerList: React.FC<Props> = ({ partners, nodes, selectedId, hoverId, on
                 <span className="inline-block w-2 h-2 rounded-full shrink-0" style={{ background: KIND_HEX[n!.group] ?? KIND_HEX.UNKNOWN }} />
                 <span className="text-text-1 truncate flex-1">{n!.name}</span>
                 {p.events > 0 && (
-                  <button onClick={e => { e.stopPropagation(); onEvidence(p.id); }} title="evidence"
-                    className="font-mono text-[11px] px-1 rounded" style={{ color: colour }}>
-                    {p.hostile && p.cooperative ? `${p.cooperative}·${p.hostile}` : p.events}
+                  <button onClick={e => { e.stopPropagation(); onEvidence(p.id); }} title={`${p.verified} verified · ${p.wire} wire — click for evidence`}
+                    className="font-mono text-[11px] px-1 rounded" style={{ color: colour, opacity: p.verified ? 1 : 0.55 }}>
+                    {p.verified > 0 ? p.verified : `${p.wire}w`}
                   </button>
                 )}
               </div>

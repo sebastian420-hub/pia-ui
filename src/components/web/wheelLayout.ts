@@ -68,6 +68,8 @@ export interface Partner {
   events: number;
   hostile: number;        // events on the hostile relation, if any
   cooperative: number;    // events on the cooperative relation, if any
+  verified: number;       // events an article said (with quotes)
+  wire: number;           // GDELT story-days
   links: GraphLink[];
 }
 
@@ -79,10 +81,12 @@ export function partnersOf(rootId: string, links: GraphLink[]): Partner[] {
     if (a !== rootId && b !== rootId) continue;
     const other = a === rootId ? b : a;
     if (other === rootId) continue;
-    const p = by.get(other) ?? { id: other, sector: 'facts', weight: 0, events: 0, hostile: 0, cooperative: 0, links: [] };
+    const p = by.get(other) ?? { id: other, sector: 'facts', weight: 0, events: 0, hostile: 0, cooperative: 0, verified: 0, wire: 0, links: [] };
     p.links.push(l);
     p.weight += l.weight ?? (l.origin === 'wikidata' ? 1 : 0.5);
     p.events += l.event_count ?? 0;
+    p.verified += l.verified_count ?? 0;
+    p.wire += l.wire_count ?? 0;
     if (l.kind === 'HOSTILE') p.hostile += l.event_count ?? 0;
     if (l.kind === 'COOPERATIVE') p.cooperative += l.event_count ?? 0;
     by.set(other, p);
