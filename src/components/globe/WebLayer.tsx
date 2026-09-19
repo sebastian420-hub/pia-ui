@@ -76,17 +76,21 @@ export const WebLayer = React.memo(function WebLayer({ data, tier, showHostile, 
     const links = data.links.filter(l => {
       if (l.event_count < rules.minEvents) return false;
       if (!pos.has(l.source) || !pos.has(l.target)) return false;
-      const kindOk = (l.hostile_n > 0 && showHostile) || (l.coop_n > 0 && showCooperative);
-      if (!kindOk) return false;
+      if (!((l.hostile_n > 0 && showHostile) || (l.coop_n > 0 && showCooperative))) return false;
       if (topicsOff.size && l.topics?.length && l.topics.every(t => topicsOff.has(t.topic))) return false;
       return true;
     }).map(l => {
       const a = pos.get(l.source)!, b = pos.get(l.target)!;
-      const width = Math.max(1.5, Math.min(9, 1 + Math.log2(1 + l.event_count) * 1.2));
-      const both = l.hostile_n > 0 && l.coop_n > 0 && showHostile && showCooperative;
-      const hex = l.kind === 'HOSTILE' ? RELATION_HEX.HOSTILE : RELATION_HEX.COOPERATIVE;
-      const hex2 = both ? (l.kind === 'HOSTILE' ? RELATION_HEX.COOPERATIVE : RELATION_HEX.HOSTILE) : undefined;
-      return { ...l, positions: arc(a, b), positions2: both ? arc(a, b, 0.045, 25_000) : undefined, width, hex, hex2 };
+      // only the kinds that are switched on are drawn: with "coop" off, a mixed pair shows its
+      // hostile stroke alone, sized by its hostile events
+      const h = showHostile ? l.hostile_n : 0, c = showCooperative ? l.coop_n : 0;
+      const shown = h + c;
+      const width = Math.max(1.5, Math.min(9, 1 + Math.log2(1 + shown) * 1.2));
+      const both = h > 0 && c > 0;
+      const main: 'HOSTILE' | 'COOPERATIVE' = h > c ? 'HOSTILE' : 'COOPERATIVE';
+      const hex = RELATION_HEX[main];
+      const hex2 = both ? RELATION_HEX[main === 'HOSTILE' ? 'COOPERATIVE' : 'HOSTILE'] : undefined;
+      return { ...l, kind: main, positions: arc(a, b), positions2: both ? arc(a, b, 0.045, 25_000) : undefined, width, hex, hex2 };
     });
     const linked = new Set<string>(links.flatMap(l => [l.source, l.target]));
     const nodes = data.nodes

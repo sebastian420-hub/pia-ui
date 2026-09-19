@@ -271,8 +271,11 @@ function Dashboard() {
   const webArcs = useMemo(() => {
     if (!webOverview) return 0;
     const min = webTier === 0 ? 20 : webTier === 1 ? 5 : 1;
-    return webOverview.links.filter(l => l.event_count >= min).length;
-  }, [webOverview, webTier]);
+    return webOverview.links.filter(l => {
+      const shown = (webKinds.hostile ? l.hostile_n : 0) + (webKinds.cooperative ? l.coop_n : 0);
+      return shown > 0 && l.event_count >= min;
+    }).length;
+  }, [webOverview, webTier, webKinds]);
 
   const toggleDomain = (d: string) => setActiveDomains(p => p.includes(d) ? p.filter(x => x !== d) : [...p, d]);
   const toggleLayer = (id: LayerId) => setLayers(p => ({ ...p, [id]: !p[id] }));
