@@ -168,10 +168,11 @@ const WebView = forwardRef<WebViewHandle, Props>(function WebView(
       const a = idOf(l.source), b = idOf(l.target);
       const kind = (l.kind ?? 'MENTIONED_WITH') as RelationKind;
       const ang = SECTOR_ANGLE[kind] ?? 0;
+      const w = Math.log2(2 + (l.event_count ?? 1));   // 130 cooperative vs 15 hostile → mostly right
       const add = (node: string, hub: string) => {
         if (hubs.has(node)) return;
         const cur = acc.get(node) ?? { x: 0, y: 0, hub };
-        acc.set(node, { x: cur.x + Math.cos(ang), y: cur.y + Math.sin(ang), hub: cur.hub });
+        acc.set(node, { x: cur.x + Math.cos(ang) * w, y: cur.y + Math.sin(ang) * w, hub: cur.hub });
       };
       if (hubs.has(a)) add(b, a);
       if (hubs.has(b)) add(a, b);
