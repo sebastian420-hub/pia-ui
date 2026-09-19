@@ -44,7 +44,7 @@ function arc(a: [number, number], b: [number, number], lift = 0.045, extra = 0):
   const g = new EllipsoidGeodesic(Cartographic.fromDegrees(a[0], a[1]), Cartographic.fromDegrees(b[0], b[1]));
   const d = g.surfaceDistance;
   const n = 24;
-  const peak = Math.min(400_000, Math.max(40_000, d * lift));   // hugs the globe: 40–400 km high
+  const peak = Math.min(280_000, Math.max(30_000, d * lift));   // hugs the globe: 30–280 km high
   const out: Cartesian3[] = [];
   for (let i = 0; i <= n; i++) {
     const t = i / n;
@@ -96,7 +96,17 @@ export const WebLayer = React.memo(function WebLayer({ data, tier, showHostile, 
     const nodes = data.nodes
       .filter(n => pos.has(n.id) && (n.kind === 'COUNTRY' || n.activity >= rules.orgActivity) && (tier === 2 || linked.has(n.id)))
       .map(n => { const [lon, lat] = pos.get(n.id)!; return { ...n, lon, lat, size: Math.max(5, Math.min(16, 4 + Math.sqrt(n.activity) * 0.9)) }; });
-    const labelled = new Set([...nodes].sort((x, y) => y.activity - x.activity).slice(0, rules.labels).map(n => n.id));
+    // labels: most active first, and never two within `sep` degrees of each other (Cesium has no
+    // declutter of its own; Europe otherwise becomes a pile of names)
+    const sep = tier === 0 ? 6 : tier === 1 ? 2.5 : 0.8;
+    const kept: { lon: number; lat: number }[] = [];
+    const labelled = new Set<string>();
+    for (const n of [...nodes].sort((x, y) => y.activity - x.activity)) {
+      if (labelled.size >= rules.labels) break;
+      if (n.id !== selectedId && kept.some(k => Math.abs(k.lat - n.lat) < sep && Math.abs(k.lon - n.lon) < sep * 1.6)) continue;
+      labelled.add(n.id);
+      kept.push({ lon: n.lon, lat: n.lat });
+    }
     if (selectedId) labelled.add(selectedId);
     return { nodes, links, labelled };
   }, [data, tier, showHostile, showCooperative, topicsOff, selectedId]);
