@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { ArrowLeft, Database, Search, FolderSearch, Users, Activity, SlidersHorizontal, Network } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import WebView from '../components/hud/WebView';
+import WebWorkspace from '../components/hud/WebWorkspace';
 import { apiFetch, apiJson } from '../lib/api';
 import { zuluDateTime } from '../lib/format';
 import type { ArchiveRecord } from '../lib/types';
@@ -271,9 +271,7 @@ const Archive: React.FC = () => {
       </div>
 
       {/* Relational Web Overlay (Z-40) */}
-      {activeGraphEntity && (
-        <WebView entityKey={activeGraphEntity} onClose={() => setActiveGraphEntity(null)} onOpenEntity={(k) => setActiveGraphEntity(k)} />
-      )}
+      {activeGraphEntity && <WebWorkspace entityKey={activeGraphEntity} onClose={() => setActiveGraphEntity(null)} />}
     </div>
   );
 };

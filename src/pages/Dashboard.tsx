@@ -18,10 +18,9 @@ import type { LayerId } from '../components/frame/LayerRail';
 import { Network as NetworkIcon } from 'lucide-react';
 import LiveTicker from '../components/hud/LiveTicker';
 import WebView from '../components/hud/WebView';
-import EntityInspector from '../components/hud/EntityInspector';
+import type { WebViewHandle } from '../components/hud/WebView';
+import InspectorColumn from '../components/frame/InspectorColumn';
 import FilterBar from '../components/hud/FilterBar';
-import EntityDossier from '../components/hud/EntityDossier';
-import CameraInspector from '../components/hud/CameraInspector';
 import TerminalLog from '../components/hud/TerminalLog';
 import AICopilot from '../components/hud/AICopilot';
 import DocumentUploader from '../components/hud/DocumentUploader';
@@ -49,6 +48,8 @@ function Dashboard() {
   const [kgEvents, setKgEvents] = useState<KgEvent[]>([]);
   const [searchHits, setSearchHits] = useState<EntitySummary[]>([]);
   const [activeGraphEntity, setActiveGraphEntity] = useState<string | null>(null);
+  const [webRootId, setWebRootId] = useState<string | null>(null);
+  const webRef = useRef<WebViewHandle>(null);
   const [activeDomains, setActiveDomains] = useState<string[]>([...DOMAINS]);
   const [selection, setSelection] = useState<Selection>(null);
   const [feedStatus, setFeedStatus] = useState<'connecting' | 'live' | 'offline'>('connecting');
@@ -207,7 +208,8 @@ function Dashboard() {
   }, [flyTo]);
 
   const selectCamera = useCallback((sensorId: string) => setSelection({ kind: 'camera', sensorId }), []);
-  const selectEntity = useCallback((key: string) => { setSelection({ kind: 'entity', key }); setSearchHits([]); }, []);
+  const selectEntity = useCallback((key: string) => { if (key) setSelection({ kind: 'entity', key }); setSearchHits([]); }, []);
+  const selectEvidence = useCallback((a: string, b: string) => setSelection({ kind: 'evidence', a, b }), []);
   const openReportByUid = useCallback(async (uid: string) => {
     const known = events.find(e => e.uid === uid);
     if (known) { selectReport(known); return; }
@@ -322,20 +324,18 @@ function Dashboard() {
           <BasemapSwitcher current={basemapId} onChange={setBasemapId} />
           {showUpload && <div className="absolute top-3 right-3 z-20"><DocumentUploader onClose={() => setShowUpload(false)} /></div>}
           {showCopilot && <div className="absolute bottom-3 right-3 z-20"><AICopilot onClose={() => setShowCopilot(false)} /></div>}
-          {activeGraphEntity && <WebView entityKey={activeGraphEntity} onClose={() => setActiveGraphEntity(null)} onOpenEntity={(k) => { setActiveGraphEntity(null); selectEntity(k); }} />}
+          {activeGraphEntity && (
+            <WebView ref={webRef} entityKey={activeGraphEntity} selectedId={selection?.kind === 'entity' ? selection.key : null}
+              onClose={() => { setActiveGraphEntity(null); setWebRootId(null); }}
+              onSelectEntity={selectEntity} onSelectEvidence={selectEvidence} onRootChange={setWebRootId} />
+          )}
         </main>
 
         <aside className={`min-h-0 bg-bg-1 border-l border-line overflow-hidden ${inspectorOpen ? '' : 'hidden'}`}>
-          {selection?.kind === 'report' && (
-            <EntityDossier event={selection.event} onClose={() => setSelection(null)}
-              onOpenGraph={(n) => selectEntity(n)} onOpenCamera={selectCamera} />
-          )}
-          {selection?.kind === 'entity' && (
-            <EntityInspector entityKey={selection.key} onClose={() => setSelection(null)}
-              onOpenEntity={selectEntity} onOpenReport={openReportByUid}
-              onOpenWeb={(k) => setActiveGraphEntity(k)} onFlyTo={(lon, lat) => flyTo(lon, lat, 800000)} />
-          )}
-          {selection?.kind === 'camera' && <CameraInspector sensorId={selection.sensorId} onClose={() => setSelection(null)} />}
+          <InspectorColumn selection={selection} onClose={() => setSelection(null)}
+            onOpenEntity={selectEntity} onOpenReport={openReportByUid} onOpenCamera={selectCamera}
+            onOpenWeb={(k) => setActiveGraphEntity(k)} onFlyTo={(lon, lat) => flyTo(lon, lat, 800000)}
+            web={activeGraphEntity ? { expand: (id) => webRef.current?.expand(id), focus: (id) => webRef.current?.focus(id), rootId: webRootId } : undefined} />
         </aside>
       </div>
 

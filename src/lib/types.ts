@@ -63,6 +63,7 @@ export type Selection =
   | { kind: 'report'; event: IntelligenceEvent }
   | { kind: 'camera'; sensorId: string }
   | { kind: 'entity'; key: string }
+  | { kind: 'evidence'; a: string; b: string }
   | null;
 
 // ── knowledge web ───────────────────────────────────────────────────────────
@@ -88,6 +89,8 @@ export interface EntitySummary {
 }
 
 export interface RelationEntry {
+  sources?: string[];
+  actions?: string[];
   entity_id: string;
   qid: string | null;
   name: string;
@@ -175,6 +178,8 @@ export interface GraphNode {
   name: string;
   group: string;
   val: number;
+  mentions?: number;
+  is_root?: boolean;
   description?: string | null;
   x?: number; y?: number; z?: number;
 }
@@ -187,9 +192,11 @@ export interface GraphLink {
   kind?: RelationKind;
   origin?: 'events' | 'wikidata' | 'cooccurrence';
   event_count?: number;
+  weight?: number;
+  outlets?: string[];
   first_seen?: string | null;
   last_seen?: string | null;
   reasoning?: string | null;
 }
 
-export interface GraphData { nodes: GraphNode[]; links: GraphLink[] }
+export interface GraphData { root?: string; nodes: GraphNode[]; links: GraphLink[] }

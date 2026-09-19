@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { X, ExternalLink, Globe, Share2, TrendingUp, TrendingDown } from 'lucide-react';
+import { X, ExternalLink, Globe, Share2, TrendingUp, TrendingDown, Plus, Crosshair } from 'lucide-react';
 import { apiFetch } from '../../lib/api';
 import { zuluDateTime, zuluShort } from '../../lib/format';
 import { KIND_HEX, RELATION_HEX } from '../../lib/symbology';
@@ -12,12 +12,24 @@ interface Props {
   onOpenReport: (uid: string) => void;
   onOpenWeb: (key: string) => void;
   onFlyTo?: (lon: number, lat: number) => void;
+  /** When the web is open: expand this entity's neighbours / re-root the web on it. */
+  web?: { expand: (id: string) => void; focus: (id: string) => void; rootId: string | null };
 }
 
 const ORDER: RelationKind[] = ['HOSTILE', 'COOPERATIVE', 'ROLE', 'OWNERSHIP', 'MEMBERSHIP', 'LOCATED', 'MENTIONED_WITH'];
 
 /** The "who is who" card: identity, trend, connections by kind, recent events and reports. */
-const EntityInspector: React.FC<Props> = ({ entityKey, onClose, onOpenEntity, onOpenReport, onOpenWeb, onFlyTo }) => {
+/** "27 attacks reported (bbc.co.uk, gdelt) since 12 Sep" — the sentence behind a connection. */
+function relationSentence(r: { source: string; label: string | null; event_count: number; weight: number; first_seen: string | null; sources?: string[]; actions?: string[] }): string {
+  if (r.source === 'wikidata') return `${r.label ?? 'fact'}${r.weight < 1 ? ' · former' : ''} · Wikidata`;
+  if (r.source === 'cooccurrence') return `mentioned together in ${r.event_count} report${r.event_count === 1 ? '' : 's'}`;
+  const what = (r.actions && r.actions.length ? r.actions.map(a => a.toLowerCase()).slice(0, 3).join('/') : r.label ?? 'event');
+  const since = r.first_seen ? ` since ${new Date(r.first_seen).toISOString().slice(5, 10).replace('-', '/')}` : '';
+  const src = r.sources && r.sources.length ? ` (${r.sources.slice(0, 3).join(', ')}${r.sources.length > 3 ? ', …' : ''})` : '';
+  return `${r.event_count} ${what} event${r.event_count === 1 ? '' : 's'}${src}${since}`;
+}
+
+const EntityInspector: React.FC<Props> = ({ entityKey, onClose, onOpenEntity, onOpenReport, onOpenWeb, onFlyTo, web }) => {
   const [card, setCard] = useState<EntityCard | null>(null);
   const [events, setEvents] = useState<KgEvent[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -57,7 +69,14 @@ const EntityInspector: React.FC<Props> = ({ entityKey, onClose, onOpenEntity, on
         {card && (
           <>
             <div className="flex flex-wrap gap-2">
-              <button onClick={() => onOpenWeb(card.entity_id)} className="px-2 py-1 border border-line rounded text-text-2 hover:text-text-1 hover:border-accent flex items-center gap-1"><Share2 size={11} /> web</button>
+              {web ? (
+                <>
+                  <button onClick={() => web.expand(card.entity_id)} className="px-2 py-1 border border-accent rounded text-text-1 hover:bg-accent/20 flex items-center gap-1"><Plus size={11} /> expand</button>
+                  {web.rootId !== card.entity_id && <button onClick={() => web.focus(card.entity_id)} className="px-2 py-1 border border-line rounded text-text-2 hover:text-text-1 hover:border-accent flex items-center gap-1"><Crosshair size={11} /> focus here</button>}
+                </>
+              ) : (
+                <button onClick={() => onOpenWeb(card.entity_id)} className="px-2 py-1 border border-line rounded text-text-2 hover:text-text-1 hover:border-accent flex items-center gap-1"><Share2 size={11} /> web</button>
+              )}
               {card.geo && onFlyTo && <button onClick={() => onFlyTo(card.geo!.lon, card.geo!.lat)} className="px-2 py-1 border border-line rounded text-text-2 hover:text-text-1 hover:border-accent flex items-center gap-1"><Globe size={11} /> globe</button>}
               {card.wikidata_url && <a href={card.wikidata_url} target="_blank" rel="noreferrer" className="px-2 py-1 border border-line rounded text-text-2 hover:text-text-1 flex items-center gap-1"><ExternalLink size={11} /> wikidata</a>}
             </div>
@@ -90,9 +109,12 @@ const EntityInspector: React.FC<Props> = ({ entityKey, onClose, onOpenEntity, on
                     <ul className="divide-y divide-line border border-line rounded">
                       {rows.slice(0, 12).map((r, i) => (
                         <li key={`${k}-${r.entity_id}-${r.source}-${i}`}>
-                          <button onClick={() => onOpenEntity(r.entity_id)} className="w-full text-left px-2 py-1 hover:bg-bg-2 flex items-center justify-between gap-2">
-                            <span className="truncate text-text-1"><span className="inline-block w-1.5 h-1.5 rounded-full mr-1.5" style={{ background: KIND_HEX[r.kind] }} />{r.name}</span>
-                            <span className="text-text-3 shrink-0 text-[10px]">{r.label ?? ''}{r.source === 'events' ? ` · ${r.event_count}×` : r.source === 'wikidata' ? (r.weight < 1 ? ' · former · wd' : ' · wd') : ''}</span>
+                          <button onClick={() => onOpenEntity(r.entity_id)} className="w-full text-left px-2 py-1 hover:bg-bg-2">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="truncate text-text-1"><span className="inline-block w-1.5 h-1.5 rounded-full mr-1.5" style={{ background: KIND_HEX[r.kind] }} />{r.name}</span>
+                              <span className="text-text-3 shrink-0 text-[10px]">{r.kind}</span>
+                            </div>
+                            <div className="text-[10px] text-text-3 truncate">{relationSentence(r)}</div>
                           </button>
                         </li>
                       ))}
