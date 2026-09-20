@@ -47,7 +47,7 @@ const PartnerList: React.FC<Props> = ({ partners, nodes, selectedId, hoverId, on
     if (!l?.why) return undefined;
     return `${modalityPrefix(l.why.modality)}${l.why.predicate}${l.why.verdict === 'yes' ? '' : l.why.verdict ? ` (${l.why.verdict})` : ' (unchecked)'}`;
   };
-  const factLabel = (p: Partner) => p.links.filter(l => l.origin === 'wikidata').map(l => l.label).slice(0, 2).join(', ');
+  const factLabel = (p: Partner) => p.links.filter(l => l.origin === 'wikidata' || l.origin === 'connector').map(l => `${l.label}${l.origin === 'connector' && l.via_source ? ` (${l.via_source.replace('opensanctions_', 'OpenSanctions ')})` : ''}`).slice(0, 2).join(', ');
 
   return (
     <div className="w-[300px] shrink-0 border-r border-line flex flex-col min-h-0 bg-bg-1">

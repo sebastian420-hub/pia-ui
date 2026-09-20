@@ -126,6 +126,19 @@ const EntityInspector: React.FC<Props> = ({ entityKey, onClose, onOpenEntity, on
               </section>
             )}
             {card.timeline && card.timeline.length > 0 && <TimelineStrip events={card.timeline} now={loadedAt} />}
+            {card.listings && card.listings.length > 0 && (
+              <section className="border border-prio-critical/40 rounded px-2.5 py-2">
+                <h3 className="text-[10px] tracking-[0.2em] text-prio-critical mb-1">LISTS · {card.listings.length}</h3>
+                <ul className="space-y-0.5">
+                  {card.listings.slice(0, 8).map((l, i) => (
+                    <li key={i} className="text-[11px] text-text-2 truncate">
+                      <span className="text-text-1">{l.list}</span>{l.program ? ` · ${l.program}` : ''}{l.since ? ` · since ${l.since}` : ''}{l.until ? ` → ${l.until}` : ''}
+                      {l.url && <a href={l.url} target="_blank" rel="noreferrer" className="text-accent ml-1">source</a>}
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
 
             <dl className="grid grid-cols-[84px_1fr] gap-y-1 text-text-2">
               <dt className="text-text-3">MENTIONS</dt>
@@ -137,6 +150,9 @@ const EntityInspector: React.FC<Props> = ({ entityKey, onClose, onOpenEntity, on
                 )}
               </dd>
               <dt className="text-text-3">SEEN</dt><dd>{zuluDateTime(card.first_seen)} → {zuluDateTime(card.last_seen)}</dd>
+              {card.external_ids && card.external_ids.length > 0 && (
+                <><dt className="text-text-3">IDS</dt><dd className="text-text-3 truncate">{card.external_ids.filter(x => x.kind !== 'ftm').slice(0, 6).map(x => `${x.kind} ${x.external_id.replace(/^[a-z]+:/, '')}`).join(' · ') || `${card.external_ids.length} registry id${card.external_ids.length === 1 ? '' : 's'}`}</dd></>
+              )}
               {card.aliases.length > 1 && <><dt className="text-text-3">ALIASES</dt><dd className="text-text-3">{card.aliases.slice(0, 8).map(a => a.alias).join(' · ')}</dd></>}
               {Object.keys(card.event_counts).length > 0 && (
                 <><dt className="text-text-3">ACTIONS</dt><dd className="text-text-3">{Object.entries(card.event_counts).map(([k, n]) => `${k.toLowerCase()} ${n}`).join(' · ')}</dd></>
@@ -170,6 +186,11 @@ const EntityInspector: React.FC<Props> = ({ entityKey, onClose, onOpenEntity, on
                                 </div>
                                 {r.why.quote && <div className="text-[10px] text-text-3 italic truncate">“{r.why.quote}”</div>}
                               </>
+                            ) : r.source === 'connector' ? (
+                              <div className="text-[10px] text-text-3 truncate">
+                                <span className="text-text-2">{r.label}</span> · {r.via_source ?? 'registry'}{r.first_seen ? ` · ${r.first_seen.slice(0, 10)}` : ''}{r.last_seen ? ` → ${r.last_seen.slice(0, 10)}` : ''}
+                                {r.properties && typeof r.properties.reason === 'string' && r.properties.reason ? ` · ${(r.properties.reason as string).slice(0, 80)}` : ''}
+                              </div>
                             ) : (
                               <div className="text-[10px] text-text-3 truncate">{relationSentence(r)}</div>
                             )}

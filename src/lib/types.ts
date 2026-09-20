@@ -96,10 +96,15 @@ export interface Why {
   outlet?: string | null; when?: string | null; outgoing?: boolean; actor_id?: string;
 }
 
+export interface Listing { list: string; program?: string | null; since?: string | null; until?: string | null; url?: string | null }
+
 export interface RelationEntry {
   sources?: string[];
   actions?: string[];
   why?: Why | null;
+  via_source?: string | null;     // connector facts: which source said it
+  record_ref?: string | null;
+  properties?: Record<string, unknown> | null;
   topics?: TopicCount[];
   verified_topics?: TopicCount[];
   verified_count?: number;   // events an article said (origin llm, with a quote)
@@ -109,7 +114,7 @@ export interface RelationEntry {
   name: string;
   kind: EntityKind;
   label: string | null;
-  source: 'events' | 'wikidata' | 'cooccurrence';
+  source: 'events' | 'wikidata' | 'cooccurrence' | 'connector';
   event_count: number;
   weight: number;
   first_seen: string | null;
@@ -122,6 +127,9 @@ export interface EntityCard extends EntitySummary {
   trend: { last_7d: number; prev_7d: number } | null;
   relations: Partial<Record<RelationKind, RelationEntry[]>>;
   brief?: { text: string; generated_at: string } | null;
+  listings?: Listing[];
+  properties?: Record<string, unknown>;
+  external_ids?: { source_id: string; external_id: string; kind: string }[];
   timeline?: { event_id: string; event_time: string; kind: string | null; stance: number | null; modality: string | null;
                verifier_verdict: string | null; predicate: string; actor: string; target: string | null; quote: string | null;
                source_id: string | null; origin: string }[];
@@ -218,7 +226,8 @@ export interface GraphLink {
   label: string;
   confidence: number;
   kind?: RelationKind;
-  origin?: 'events' | 'wikidata' | 'cooccurrence';
+  origin?: 'events' | 'wikidata' | 'cooccurrence' | 'connector';
+  via_source?: string | null;
   event_count?: number;
   weight?: number;
   outlets?: string[];

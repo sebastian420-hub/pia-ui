@@ -243,7 +243,7 @@ const WebView = forwardRef<WebViewHandle, Props>(function WebView(
     const width = l.origin === 'events'
       ? (verified ? Math.max(1.5, Math.min(7, 1.2 + Math.log2(1 + (l.verified_count ?? 1)) * 1.5)) : 1)
       : 1;
-    const dash = l.origin === 'wikidata' ? [6, 4] : l.origin === 'cooccurrence' ? [2, 3] : [];
+    const dash = l.origin === 'wikidata' ? [6, 4] : l.origin === 'connector' ? [3, 3] : l.origin === 'cooccurrence' ? [2, 3] : [];
     const strokes: [string, number][] = [];
     if ((l.hostile_n ?? 0) > 0 && (l.coop_n ?? 0) > 0) {
       const tot = (l.hostile_n ?? 0) + (l.coop_n ?? 0);
@@ -354,7 +354,7 @@ const WebView = forwardRef<WebViewHandle, Props>(function WebView(
             ))}
           </div>
           <div className="absolute bottom-2 left-3 text-[10px] text-text-3 pointer-events-none">
-            hostile ← · → cooperative · roles ↓ · facts ↑ · solid = verified by an article · faint = wire only · dashed = Wikidata · click a line: evidence
+            hostile ← · → cooperative · roles ↓ · facts ↑ · solid = verified by an article · faint = wire only · dashed = Wikidata / registry · click a line: evidence
           </div>
         </div>
       </div>

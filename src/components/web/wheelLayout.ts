@@ -83,7 +83,7 @@ export function partnersOf(rootId: string, links: GraphLink[]): Partner[] {
     if (other === rootId) continue;
     const p = by.get(other) ?? { id: other, sector: 'facts', weight: 0, events: 0, hostile: 0, cooperative: 0, verified: 0, wire: 0, links: [] };
     p.links.push(l);
-    p.weight += l.weight ?? (l.origin === 'wikidata' ? 1 : 0.5);
+    p.weight += l.weight ?? (l.origin === 'wikidata' || l.origin === 'connector' ? 1 : 0.5);
     p.events += l.event_count ?? 0;
     p.verified += l.verified_count ?? 0;
     p.wire += l.wire_count ?? 0;
