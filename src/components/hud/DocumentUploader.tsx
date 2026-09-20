@@ -13,9 +13,9 @@ const DocumentUploader: React.FC<Props> = ({ onClose }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const pick = (f: File) => {
-    if (f.type === 'application/pdf' || f.type === 'text/plain' || /\.(pdf|txt)$/i.test(f.name)) {
+    if (f.type === 'application/pdf' || f.type === 'text/plain' || /\.(pdf|txt|md|json)$/i.test(f.name)) {
       setFile(f); setStatus('idle'); setMessage('');
-    } else { setStatus('error'); setMessage('Only PDF or TXT files'); }
+    } else { setStatus('error'); setMessage('Only PDF, TXT, MD or JSON files'); }
   };
 
   const upload = async () => {
@@ -44,13 +44,13 @@ const DocumentUploader: React.FC<Props> = ({ onClose }) => {
           onDrop={(e) => { e.preventDefault(); setIsDragging(false); if (e.dataTransfer.files[0]) pick(e.dataTransfer.files[0]); }}
           onClick={() => fileInputRef.current?.click()}
         >
-          <input type="file" ref={fileInputRef} className="hidden" accept=".pdf,.txt" onChange={(e) => e.target.files && pick(e.target.files[0])} />
+          <input type="file" ref={fileInputRef} className="hidden" accept=".pdf,.txt,.md,.json" onChange={(e) => e.target.files && pick(e.target.files[0])} />
           {status === 'success' ? (
             <><CheckCircle size={22} className="text-ok mb-1" /><p className="text-ok">Queued</p></>
           ) : file ? (
             <><FileText size={22} className="text-accent mb-1" /><p className="text-text-1 truncate max-w-full">{file.name}</p><p className="text-text-3">{(file.size / 1024 / 1024).toFixed(2)} MB</p></>
           ) : (
-            <><Upload size={22} className="text-text-3 mb-1" /><p className="text-text-3">Drop a PDF or TXT here, or click</p></>
+            <><Upload size={22} className="text-text-3 mb-1" /><p className="text-text-3">Drop a PDF, TXT or a SPOTREP (.md/.json) here, or click</p></>
           )}
         </div>
         {message && status !== 'success' && (
