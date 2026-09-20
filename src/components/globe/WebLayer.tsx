@@ -78,7 +78,8 @@ export const WebLayer = React.memo(function WebLayer({ data, tier, showHostile, 
     const links = data.links.filter(l => {
       const verified = (l.verified_count ?? 0) > 0;
       if (!verified && !showWire) return false;
-      // verified pairs always qualify; wire-only pairs need the tier's minimum
+      // far away only the well-attested pairs show; wire-only pairs need the tier's wire minimum
+      if (verified && (l.verified_count ?? 0) < rules.minVerified) return false;
       if (!verified && l.event_count < rules.minEvents) return false;
       if (!pos.has(l.source) || !pos.has(l.target)) return false;
       const h = verified ? l.v_hostile_n : l.hostile_n, c = verified ? l.v_coop_n : l.coop_n;

@@ -10,10 +10,11 @@ const Review: React.FC = () => {
   const [items, setItems] = useState<ReviewItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [custom, setCustom] = useState<Record<string, string>>({});
+  const [total, setTotal] = useState<number | null>(null);
 
   const load = useCallback(() => {
     apiFetch<ReviewItem[]>('/api/v1/kg/review?limit=100').then(r => {
-      if (r.status === 'success' && r.data) setItems(r.data);
+      if (r.status === 'success' && r.data) { setItems(r.data); setTotal(r.total ?? r.data.length); }
       setLoading(false);
     });
   }, []);
@@ -30,14 +31,14 @@ const Review: React.FC = () => {
       <div className="h-10 flex items-center gap-3 px-4 border-b border-line bg-bg-1">
         <Link to="/" className="text-text-3 hover:text-text-1"><ArrowLeft size={16} /></Link>
         <span className="tracking-[0.2em] text-text-1">IDENTITY REVIEW</span>
-        <span className="text-text-3">· {items.length} names waiting</span>
+        <span className="text-text-3">· {total ?? items.length} names waiting{total && total > items.length ? ` · showing ${items.length}` : ''}</span>
       </div>
       <div className="flex-1 overflow-y-auto p-4 space-y-2 max-w-5xl">
         {loading && <div className="text-text-3">Loading…</div>}
         {!loading && items.length === 0 && <div className="text-text-3">Nothing to review. The resolver is confident about everything it has seen.</div>}
         {items.map(it => (
-          <div key={it.entity_id} className="border border-line rounded bg-bg-1 p-3 grid grid-cols-1 lg:grid-cols-[1fr_minmax(360px,1fr)] gap-4">
-            <div>
+          <div key={it.entity_id} className="border border-line rounded bg-bg-1 p-3 grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(360px,1fr)] gap-4">
+            <div className="min-w-0">
               <div className="flex items-center gap-2">
                 <span className="text-[10px] px-1.5 rounded" style={{ background: KIND_HEX[it.kind], color: '#07090c' }}>{it.kind}</span>
                 <span className="text-text-1 text-[13px]">{it.name}</span>
@@ -49,7 +50,7 @@ const Review: React.FC = () => {
                 ))}
               </ul>
             </div>
-            <div className="space-y-1">
+            <div className="space-y-1 min-w-0">
               {it.candidates.map(c => (
                 <button key={c.qid} onClick={() => decide(it.entity_id, 'merge', c.qid)}
                   className="w-full text-left px-2 py-1 border border-line rounded hover:border-accent hover:bg-bg-2 flex items-center gap-2">

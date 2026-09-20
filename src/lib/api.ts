@@ -12,6 +12,7 @@ export interface ApiEnvelope<T> {
   message?: string;
   reply?: string;
   pagination?: { page: number; limit: number; total: number; total_pages: number };
+  total?: number;
 }
 
 /** fetch() with the Authorization header; never throws on HTTP errors, returns the envelope. */

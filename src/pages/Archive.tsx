@@ -2,15 +2,31 @@ import React, { useEffect, useState } from 'react';
 import { ArrowLeft, Database, Search, FolderSearch, Users, Activity, SlidersHorizontal, Network } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import WebWorkspace from '../components/hud/WebWorkspace';
+import InspectorColumn from '../components/frame/InspectorColumn';
 import { apiFetch, apiJson } from '../lib/api';
 import { zuluDateTime } from '../lib/format';
-import type { ArchiveRecord } from '../lib/types';
+import type { ArchiveRecord, IntelligenceEvent, Selection } from '../lib/types';
 
 const Archive: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'uir' | 'entities'>('uir');
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   const [activeGraphEntity, setActiveGraphEntity] = useState<string | null>(null);
+  const [selection, setSelection] = useState<Selection>(null);
+
+  /** A row opens in the inspector column: reports by uid (fetched), entities by Q-id / id. */
+  const openRow = (record: ArchiveRecord) => {
+    if (activeTab === 'entities') setSelection({ kind: 'entity', key: record.qid ?? record.uid });
+    else openReport(record.uid);
+  };
+  const openReport = async (uid: string) => {
+    const r = await apiFetch<{ uid: string; created_at: string; source_type: string; priority: string; domain: string; content_headline: string; geo: { lat: number; lon: number } | null }>(`/api/v1/reports/${uid}`);
+    if (r.status === 'success' && r.data) {
+      const d = r.data;
+      const event: IntelligenceEvent = { uid: d.uid, created_at: d.created_at, source_type: d.source_type, priority: d.priority, domain: d.domain, headline: d.content_headline, geo: d.geo };
+      setSelection({ kind: 'report', event });
+    }
+  };
   
   const [records, setRecords] = useState<ArchiveRecord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -201,7 +217,8 @@ const Archive: React.FC = () => {
                       </td>
                     </tr>
                   ) : records.map((record, idx) => (
-                    <tr key={record.uid || idx} className="border-b border-white/5 hover:bg-white/5 transition-colors">
+                    <tr key={record.uid || idx} onClick={() => openRow(record)}
+                      className={`border-b border-white/5 hover:bg-white/5 transition-colors cursor-pointer ${selection && 'event' in selection && selection.event.uid === record.uid ? 'bg-white/5' : ''}`}>
                       {activeTab === 'uir' && (
                         <td className="p-4 whitespace-nowrap text-white/70">
                           {zuluDateTime(record.created_at)}
@@ -268,6 +285,17 @@ const Archive: React.FC = () => {
             </div>
           )}
         </div>
+
+        {/* Inspector column: the same report / entity cards as the dashboard */}
+        {selection && (
+          <aside className="w-[380px] shrink-0 min-h-0 bg-bg-1 border-l border-line overflow-hidden">
+            <InspectorColumn selection={selection} onClose={() => setSelection(null)}
+              onOpenEntity={(k) => setSelection({ kind: 'entity', key: k })}
+              onOpenReport={openReport}
+              onOpenCamera={() => { /* cameras live on the globe */ }}
+              onOpenWeb={(k) => setActiveGraphEntity(k)} />
+          </aside>
+        )}
       </div>
 
       {/* Relational Web Overlay (Z-40) */}

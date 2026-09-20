@@ -16,7 +16,7 @@ import StatusBar from '../components/frame/StatusBar';
 import LayerRail from '../components/frame/LayerRail';
 import type { LayerId } from '../components/frame/LayerRail';
 import WebLayer, { type WebPickNode } from '../components/globe/WebLayer';
-import { tierForHeight, webLinkFromEntityId, type WebTier } from '../components/globe/webTier';
+import { TIER_RULES, tierForHeight, webLinkFromEntityId, type WebTier } from '../components/globe/webTier';
 import { Network as NetworkIcon } from 'lucide-react';
 import LiveTicker from '../components/hud/LiveTicker';
 import WebView from '../components/hud/WebView';
@@ -270,12 +270,14 @@ function Dashboard() {
 
   const webArcs = useMemo(() => {
     if (!webOverview) return 0;
-    const min = webTier === 0 ? 20 : webTier === 1 ? 5 : 1;
+    const rules = TIER_RULES[webTier];
     return webOverview.links.filter(l => {
       const verified = (l.verified_count ?? 0) > 0;
       if (!verified && !webKinds.wire) return false;
+      if (verified && (l.verified_count ?? 0) < rules.minVerified) return false;
+      if (!verified && l.event_count < rules.minEvents) return false;
       const shown = (webKinds.hostile ? (verified ? l.v_hostile_n : l.hostile_n) : 0) + (webKinds.cooperative ? (verified ? l.v_coop_n : l.coop_n) : 0);
-      return shown > 0 && (verified || l.event_count >= min);
+      return shown > 0;
     }).length;
   }, [webOverview, webTier, webKinds]);
 

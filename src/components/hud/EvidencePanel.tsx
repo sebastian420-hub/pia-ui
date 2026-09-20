@@ -77,7 +77,7 @@ const EvidencePanel: React.FC<Props> = ({ a, b, onClose, onOpenEntity }) => {
                   <div className="text-text-2 flex items-center gap-1">{e.actor} <ArrowRight size={10} className="text-text-3" /> {e.target}</div>
                   {e.quote && <div className="text-text-3 italic text-[11px] mt-0.5">“{e.quote}”</div>}
                   {/* GDELT events carry no quote: the evidence is the headline, the outlet and the CAMEO code */}
-                  {!e.quote && e.content_headline && <div className="text-text-2 text-[11px] mt-0.5">{e.content_headline}</div>}
+                  {!e.quote && e.content_headline && !/ — .* — /.test(e.content_headline) && <div className="text-text-2 text-[11px] mt-0.5">{e.content_headline}</div>}
                   {e.quote && e.content_headline && <div className="text-text-3 text-[10px] mt-0.5 truncate">{e.content_headline}</div>}
                   {e.coded_as && <div className="text-text-3 text-[10px] mt-0.5">coded by {e.coded_as}{e.outlets && e.outlets.length > 1 ? ` · ${e.outlets.length} outlets` : ''}</div>}
                   {e.source_url && <a href={e.source_url} target="_blank" rel="noreferrer" className="text-accent text-[10px] inline-flex items-center gap-1"><ExternalLink size={9} /> source</a>}
