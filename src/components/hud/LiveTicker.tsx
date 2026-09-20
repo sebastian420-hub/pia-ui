@@ -36,7 +36,7 @@ const LiveTicker: React.FC<LiveTickerProps> = ({ events, selectedUid, onEventCli
       <span className="text-text-3 tabular-nums">{zuluShort(e.created_at)}</span>
       <span className={`${priorityText(e.priority)} font-semibold`}>{(e.priority || 'N').slice(0, 1)}</span>
       <span className="text-text-3">{DOMAIN_ABBR[e.domain] ?? 'UNK'}</span>
-      <span className="text-text-1 truncate">{e.headline?.startsWith('[SIM]') && <span className="text-text-3 mr-1">SIM</span>}{e.headline}</span>
+      <span className={`truncate ${e.alert ? 'text-prio-high' : 'text-text-1'}`}>{e.headline?.startsWith('[SIM]') && <span className="text-text-3 mr-1">SIM</span>}{e.headline}</span>
     </button>
   );
 

@@ -8,10 +8,11 @@ interface StatusBarProps {
   feedStatus: 'connecting' | 'live' | 'offline';
   alertCount: number;
   onLiveChange?: (active: boolean) => void;
+  mission?: React.ReactNode;          // the mission switcher, owned by the page
 }
 
 /** 32 px top bar: banner · Zulu clock · feed · agents · alerts · GO LIVE meter. */
-const StatusBar: React.FC<StatusBarProps> = ({ feedStatus, alertCount, onLiveChange }) => {
+const StatusBar: React.FC<StatusBarProps> = ({ feedStatus, alertCount, onLiveChange, mission }) => {
   const [clock, setClock] = useState(zuluTime());
   const [health, setHealth] = useState<Health | null>(null);
   const [live, setLive] = useState<LiveStatus | null>(null);
@@ -57,7 +58,7 @@ const StatusBar: React.FC<StatusBarProps> = ({ feedStatus, alertCount, onLiveCha
     <div className="h-8 flex items-center gap-4 px-3 bg-bg-1 border-b border-line font-mono text-[12px] text-text-2 select-none">
       <span className="tracking-[0.2em] text-text-1 font-semibold">UNCLASSIFIED // OSINT</span>
       <span className="text-text-3">·</span>
-      <span>MISSION <span className="text-text-1">GENERAL</span></span>
+      {mission ?? <span>MISSION <span className="text-text-1">GENERAL</span></span>}
 
       <span className="ml-auto flex items-center gap-4">
         <span className={`flex items-center gap-1 ${feedColor}`} title="Live feed WebSocket">

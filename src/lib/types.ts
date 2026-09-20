@@ -9,6 +9,8 @@ export interface IntelligenceEvent {
   name?: string;
   created_at?: string | null;
   geo: GeoPoint | null;
+  mission_id?: string | null;
+  alert?: boolean;
 }
 
 export interface LayerCount { layer_id: string; label: string; count: number }
@@ -206,6 +208,8 @@ export interface ArchiveRecord {
   entities?: string[];
   similarity?: number;
   geo?: GeoPoint | null;
+  mission_id?: string | null;
+  alert?: boolean;
 }
 
 export interface GraphNode {
@@ -255,3 +259,33 @@ export interface WebOverviewLink {
 }
 export interface WebOverview { window: '24h' | '7d' | '30d' | '90d'; nodes: WebOverviewNode[]; links: WebOverviewLink[] }
 export type WebWindow = WebOverview['window'];
+
+// ── missions ────────────────────────────────────────────────────────────────
+export interface Mission {
+  mission_id: string;
+  name: string;
+  description: string | null;
+  is_active: boolean;
+  is_general: boolean;
+  countries: string[];          // Q-ids
+  country_names?: string[] | null;
+  languages: string[];
+  feeds: string[];
+  sources: string[];
+  watchlist: string[];          // entity ids
+  watchlist_names?: string[] | null;
+  topics: string[];
+  alert_rules: { watchlist_hostile?: boolean; watchlist_pair?: boolean; new_entity_in_area?: number };
+  default_view: Record<string, unknown>;
+  model: string | null;
+  area: unknown | null;         // GeoJSON
+  reports?: number; events?: number; entities?: number; alerts?: number;
+  last_alert?: string | null;
+  created_at: string; updated_at: string;
+}
+
+export interface MissionIn {
+  name: string; description?: string | null; countries: string[]; languages: string[]; feeds: string[]; sources: string[];
+  watchlist: string[]; topics: string[]; alert_rules: Mission['alert_rules']; default_view: Record<string, unknown>;
+  model?: string | null; bbox?: number[] | null;
+}

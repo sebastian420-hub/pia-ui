@@ -26,6 +26,10 @@ import FilterBar from '../components/hud/FilterBar';
 import TerminalLog from '../components/hud/TerminalLog';
 import AICopilot from '../components/hud/AICopilot';
 import DocumentUploader from '../components/hud/DocumentUploader';
+import MissionSwitcher from '../components/mission/MissionSwitcher';
+import MissionEditor from '../components/mission/MissionEditor';
+import { useMissions } from '../lib/missions';
+import type { Mission } from '../lib/types';
 import type { IntelligenceEvent, ClusterRow, ArchiveRecord, LayerCount, Sensor, Selection, KgEvent, EntitySummary, WebOverview, WebWindow } from '../lib/types';
 import { apiFetch, liveSocketUrl } from '../lib/api';
 import { DOMAINS } from '../lib/domains';
@@ -37,7 +41,8 @@ const ionToken: string = import.meta.env.VITE_CESIUM_ION_TOKEN ?? '';
 if (ionToken) Ion.defaultAccessToken = ionToken;
 
 function archiveToEvent(r: ArchiveRecord): IntelligenceEvent {
-  return { uid: r.uid, source_type: r.source_type, priority: r.priority, domain: r.domain, headline: r.content_headline, created_at: r.created_at, geo: r.geo ?? null };
+  return { uid: r.uid, source_type: r.source_type, priority: r.priority, domain: r.domain, headline: r.content_headline, created_at: r.created_at,
+           geo: r.geo ?? null, mission_id: r.mission_id ?? null, alert: r.alert ?? false };
 }
 
 const EMPTY_SET = new Set<string>();
@@ -64,8 +69,13 @@ function Dashboard() {
   const [showCopilot, setShowCopilot] = useState(false);
   const [showUpload, setShowUpload] = useState(false);
   const [liveActive, setLiveActive] = useState(false);
+  const missionsApi = useMissions();
+  const mq = missionsApi.query;                                   // '' or '&mission_id=…' — every data request carries it
+  const [missionEditor, setMissionEditor] = useState<{ open: boolean; mission: Mission | null }>({ open: false, mission: null });
 
   const wsRef = useRef<WebSocket | null>(null);
+  const missionRef = useRef<string | null>(null);                 // active narrowing mission id, read by the socket handler
+  useEffect(() => { missionRef.current = missionsApi.narrowing ? missionsApi.active!.mission_id : null; }, [missionsApi.narrowing, missionsApi.active]);
   const viewerRef = useRef<CesiumComponentRef<CesiumViewer>>(null);
   const bboxRef = useRef<string>('minLat=-90&minLon=-180&maxLat=90&maxLon=180');
 
@@ -107,17 +117,25 @@ function Dashboard() {
   }, []);
 
   const loadStrategic = useCallback((query: string) => {
-    apiFetch<IntelligenceEvent[]>(`/api/v1/entities/bbox?${query}`).then(r => {
+    apiFetch<IntelligenceEvent[]>(`/api/v1/entities/bbox?${query}${mq}`).then(r => {
       if (r.status === 'success' && r.data) setStrategicEntities(r.data);
     });
-  }, []);
+  }, [mq]);
 
   const loadEvents = useCallback(() => {
     const from = new Date(Date.now() - 48 * 3600 * 1000).toISOString();
-    apiFetch<KgEvent[]>(`/api/v1/kg/events?from=${encodeURIComponent(from)}&limit=800`).then(r => {
+    apiFetch<KgEvent[]>(`/api/v1/kg/events?from=${encodeURIComponent(from)}&limit=800${mq}`).then(r => {
       if (r.status === 'success' && r.data) setKgEvents(r.data.filter(e => e.geo));
     });
-  }, []);
+  }, [mq]);
+
+  // The feed: the last 150 reports the mission cares about; reloaded when the mission changes.
+  const loadFeed = useCallback(() => {
+    apiFetch<ArchiveRecord[]>(`/api/v1/archive?page=1&limit=150${mq}`).then(r => {
+      if (r.status === 'success' && r.data) setEvents([...r.data].reverse().map(archiveToEvent));
+    });
+  }, [mq]);
+  useEffect(() => { loadFeed(); }, [loadFeed]);
 
   // Debounced, and stale responses are dropped so fast typing cannot show results for an older prefix.
   const searchSeq = useRef(0);
@@ -147,9 +165,6 @@ function Dashboard() {
         .filter((c): c is ClusterRow & { lat: number; lon: number } => c.lat != null && c.lon != null)
         .map(c => ({ uid: c.cluster_id, name: c.name || 'Situation', priority: c.priority || 'NORMAL', domain: c.domain || 'UNKNOWN', lat: c.lat, lon: c.lon })));
     });
-    apiFetch<ArchiveRecord[]>('/api/v1/archive?page=1&limit=150').then(r => {
-      if (r.status === 'success' && r.data) addEvents([...r.data].reverse().map(archiveToEvent));
-    });
     loadLayerCounts();
     loadEvents();
     const countsTimer = setInterval(() => { loadLayerCounts(); loadEvents(); }, 60000);
@@ -161,13 +176,20 @@ function Dashboard() {
       const ws = new WebSocket(liveSocketUrl());
       wsRef.current = ws;
       ws.onopen = () => setFeedStatus('live');
-      ws.onmessage = (m) => { try { addEvents([JSON.parse(m.data) as IntelligenceEvent]); } catch (e) { console.error(e); } };
+      ws.onmessage = (m) => {
+        try {
+          const ev = JSON.parse(m.data) as IntelligenceEvent;
+          const want = missionRef.current;
+          if (want && ev.mission_id !== want && !ev.alert) return;   // not this mission's: it is in the archive, not the live feed
+          addEvents([ev]);
+        } catch (e) { console.error(e); }
+      };
       ws.onclose = () => { setFeedStatus('offline'); if (!closed) retry = setTimeout(connectWs, 3000); };
     };
     connectWs();
 
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') { setActiveGraphEntity(null); setSelection(null); setShowCopilot(false); setShowUpload(false); setSearchHits([]); }
+      if (e.key === 'Escape') { setActiveGraphEntity(null); setSelection(null); setShowCopilot(false); setShowUpload(false); setSearchHits([]); setMissionEditor({ open: false, mission: null }); }
     };
     window.addEventListener('keydown', onKey);
     return () => {
@@ -187,13 +209,13 @@ function Dashboard() {
     if (!layers.web) return;
     let cancelled = false;
     const load = async () => {
-      const r = await apiFetch<WebOverview>(`/api/v1/kg/web/overview?window=${webWindow}&min_events=3&limit=400`);
+      const r = await apiFetch<WebOverview>(`/api/v1/kg/web/overview?window=${webWindow}&min_events=3&limit=400${mq}`);
       if (!cancelled && r.status === 'success' && r.data) setWebOverview(r.data);
     };
     load();
     const t = setInterval(load, 300_000);
     return () => { cancelled = true; clearInterval(t); };
-  }, [layers.web, webWindow]);
+  }, [layers.web, webWindow, mq]);
 
   const handleCameraMoveEnd = useCallback(() => {
     let viewer: CesiumViewer | undefined;
@@ -219,6 +241,13 @@ function Dashboard() {
     if (import.meta.env.DEV) (window as unknown as { __pia_viewer?: CesiumViewer }).__pia_viewer = viewerRef.current?.cesiumElement;
   });
   useEffect(() => { refreshViewport(); loadLayerCounts(); }, [liveActive, refreshViewport, loadLayerCounts]);
+
+  const currentBbox = useCallback((): number[] | null => {
+    const m = bboxRef.current.match(/minLat=([-\d.]+)&minLon=([-\d.]+)&maxLat=([-\d.]+)&maxLon=([-\d.]+)/);
+    if (!m) return null;
+    const [minLat, minLon, maxLat, maxLon] = m.slice(1).map(Number);
+    return [minLon, minLat, Math.min(maxLon, 180), maxLat];
+  }, []);
 
   const flyTo = useCallback((lon: number, lat: number, height = 300000) => {
     viewerRef.current?.cesiumElement?.camera.flyTo({ destination: Cartesian3.fromDegrees(lon, lat, height), duration: 1.5 });
@@ -292,7 +321,9 @@ function Dashboard() {
 
   return (
     <div className="h-screen w-screen bg-bg-0 text-text-1 flex flex-col overflow-hidden">
-      <StatusBar feedStatus={feedStatus} alertCount={alertCount} onLiveChange={setLiveActive} />
+      <StatusBar feedStatus={feedStatus} alertCount={alertCount} onLiveChange={setLiveActive}
+        mission={<MissionSwitcher missions={missionsApi.missions} active={missionsApi.active} scope={missionsApi.scope} onScope={missionsApi.setScope}
+                   onActivate={missionsApi.activate} onEdit={(m) => setMissionEditor({ open: true, mission: m })} />} />
 
       {/* Tool row: domain filter · entity search · actions. Fixed slot, never over the globe. */}
       <div className="h-9 flex items-center gap-3 px-3 bg-bg-1 border-b border-line">
@@ -365,6 +396,12 @@ function Dashboard() {
           {/* Floating tools live inside the globe cell, so they can never cover the inspector. */}
           <BasemapSwitcher current={basemapId} onChange={setBasemapId} />
           {showUpload && <div className="absolute top-3 right-3 z-20"><DocumentUploader onClose={() => setShowUpload(false)} /></div>}
+          {missionEditor.open && (
+            <div className="absolute top-3 left-3 z-30">
+              <MissionEditor mission={missionEditor.mission} currentBbox={currentBbox} onSave={missionsApi.save} onDelete={missionsApi.remove}
+                onClose={() => setMissionEditor({ open: false, mission: null })} />
+            </div>
+          )}
           {showCopilot && <div className="absolute bottom-3 right-3 z-20"><AICopilot onClose={() => setShowCopilot(false)} /></div>}
           {activeGraphEntity && (
             <WebView ref={webRef} entityKey={activeGraphEntity} selectedId={selection?.kind === 'entity' ? selection.key : null}
