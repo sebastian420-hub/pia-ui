@@ -1,8 +1,10 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { X, ExternalLink, Globe, Share2, TrendingUp, TrendingDown, Plus, Crosshair } from 'lucide-react';
 import { apiFetch } from '../../lib/api';
 import { zuluDateTime, zuluShort } from '../../lib/format';
 import { KIND_HEX, RELATION_HEX } from '../../lib/symbology';
+import { VerdictBadge } from '../web/verdict';
+import { modalityPrefix } from '../web/modality';
 import type { EntityCard, KgEvent, RelationKind } from '../../lib/types';
 
 interface Props {
@@ -19,6 +21,32 @@ interface Props {
 const ORDER: RelationKind[] = ['HOSTILE', 'COOPERATIVE', 'ROLE', 'OWNERSHIP', 'MEMBERSHIP', 'LOCATED', 'MENTIONED_WITH'];
 
 /** The "who is who" card: identity, trend, connections by kind, recent events and reports. */
+/** 30 days of the entity's article-read events: one dot per event, colour = stance, hover = the words. */
+const TimelineStrip: React.FC<{ events: NonNullable<EntityCard['timeline']>; now: number }> = ({ events, now }) => {
+  const days = 30;
+  const cols = useMemo(() => {
+    const c: (typeof events)[] = Array.from({ length: days }, () => []);
+    events.forEach(e => {
+      const d = Math.floor((now - Date.parse(e.event_time)) / 86_400_000);
+      if (d >= 0 && d < days) c[days - 1 - d].push(e);
+    });
+    return c;
+  }, [events, now]);
+  const hex = (e: (typeof events)[number]) => (e.stance ?? 0) <= -1 ? RELATION_HEX.HOSTILE : (e.stance ?? 0) >= 1 ? RELATION_HEX.COOPERATIVE : '#9aa3ad';
+  return (
+    <div>
+      <div className="text-[10px] tracking-[0.2em] text-text-3 mb-1">LAST 30 DAYS · {events.length} event{events.length === 1 ? '' : 's'}</div>
+      <div className="grid gap-[2px]" style={{ gridTemplateColumns: `repeat(${days}, 1fr)` }}>
+        {cols.map((col, i) => (
+          <div key={i} className="h-7 rounded-sm bg-bg-2 flex flex-col-reverse items-stretch gap-[1px] p-[1px]" title={`${days - 1 - i} day${days - 1 - i === 1 ? '' : 's'} ago · ${col.length} event${col.length === 1 ? '' : 's'}${col.slice(0, 3).map(e => `\n${e.actor} — ${modalityPrefix(e.modality)}${e.predicate} — ${e.target ?? ''}`).join('')}`}>
+            {col.slice(0, 6).map(e => <span key={e.event_id} className="h-[3px] rounded-sm" style={{ background: hex(e), opacity: e.verifier_verdict === 'yes' ? 1 : 0.45 }} />)}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
 /** "27 attacks reported (bbc.co.uk, gdelt) since 12 Sep" — the sentence behind a connection. */
 function relationSentence(r: { source: string; label: string | null; event_count: number; weight: number; first_seen: string | null; sources?: string[]; actions?: string[]; topics?: { topic: string; count: number }[]; verified_topics?: { topic: string; count: number }[]; verified_count?: number; wire_count?: number }): string {
   if (r.source === 'wikidata') return `${r.label ?? 'fact'}${r.weight < 1 ? ' · former' : ''} · Wikidata`;
@@ -57,6 +85,8 @@ const EntityInspector: React.FC<Props> = ({ entityKey, onClose, onOpenEntity, on
     return () => { cancelled = true; };
   }, [entityKey]);
 
+  const [loadedAt, setLoadedAt] = useState(0);
+  useEffect(() => { if (card) setLoadedAt(Date.now()); }, [card]);
   const trendUp = card?.trend ? card.trend.last_7d > card.trend.prev_7d : false;
 
   return (
@@ -88,6 +118,14 @@ const EntityInspector: React.FC<Props> = ({ entityKey, onClose, onOpenEntity, on
               {card.geo && onFlyTo && <button onClick={() => onFlyTo(card.geo!.lon, card.geo!.lat)} className="px-2 py-1 border border-line rounded text-text-2 hover:text-text-1 hover:border-accent flex items-center gap-1"><Globe size={11} /> globe</button>}
               {card.wikidata_url && <a href={card.wikidata_url} target="_blank" rel="noreferrer" className="px-2 py-1 border border-line rounded text-text-2 hover:text-text-1 flex items-center gap-1"><ExternalLink size={11} /> wikidata</a>}
             </div>
+
+            {card.brief && (
+              <section className="border border-line rounded px-2.5 py-2 bg-bg-2/60">
+                <h3 className="text-[10px] tracking-[0.2em] text-text-3 mb-1">WHAT IS HAPPENING <span className="text-text-3/70">· from verified quotes · {zuluDateTime(card.brief.generated_at)}</span></h3>
+                <p className="text-text-1 leading-snug text-[12px]">{card.brief.text}</p>
+              </section>
+            )}
+            {card.timeline && card.timeline.length > 0 && <TimelineStrip events={card.timeline} now={loadedAt} />}
 
             <dl className="grid grid-cols-[84px_1fr] gap-y-1 text-text-2">
               <dt className="text-text-3">MENTIONS</dt>
@@ -122,7 +160,19 @@ const EntityInspector: React.FC<Props> = ({ entityKey, onClose, onOpenEntity, on
                               <span className="truncate text-text-1"><span className="inline-block w-1.5 h-1.5 rounded-full mr-1.5" style={{ background: KIND_HEX[r.kind] }} />{r.name}</span>
                               <span className="text-text-3 shrink-0 text-[10px]">{r.kind}</span>
                             </div>
-                            <div className="text-[10px] text-text-3 truncate">{relationSentence(r)}</div>
+                            {r.why ? (
+                              <>
+                                <div className="text-[11px] text-text-2 truncate">
+                                  {r.why.outgoing === false ? `${r.name} — ` : ''}<span style={{ color: RELATION_HEX[k] }}>{modalityPrefix(r.why.modality)}{r.why.predicate}</span>{r.why.outgoing === false ? '' : ` — ${r.name}`}
+                                  <VerdictBadge verdict={r.why.verdict} />
+                                  {(r.verified_count ?? 0) > 1 && <span className="text-text-3"> · {r.verified_count} verified</span>}
+                                  {(r.wire_count ?? 0) > 0 && <span className="text-text-3"> · {r.wire_count} wire</span>}
+                                </div>
+                                {r.why.quote && <div className="text-[10px] text-text-3 italic truncate">“{r.why.quote}”</div>}
+                              </>
+                            ) : (
+                              <div className="text-[10px] text-text-3 truncate">{relationSentence(r)}</div>
+                            )}
                           </button>
                         </li>
                       ))}

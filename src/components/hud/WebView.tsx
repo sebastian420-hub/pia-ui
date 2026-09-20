@@ -152,7 +152,7 @@ const WebView = forwardRef<WebViewHandle, Props>(function WebView(
       // one line per pair: keep the stronger relation's kind, remember both counts
       if (l.kind === 'HOSTILE') cur.hostile_n = (cur.hostile_n ?? 0) + (l.event_count ?? 0);
       if (l.kind === 'COOPERATIVE') cur.coop_n = (cur.coop_n ?? 0) + (l.event_count ?? 0);
-      if ((l.weight ?? 0) > (cur.weight ?? 0)) Object.assign(cur, { kind: l.kind, label: l.label, weight: l.weight, topics: l.topics, outlets: l.outlets });
+      if ((l.weight ?? 0) > (cur.weight ?? 0)) Object.assign(cur, { kind: l.kind, label: l.label, weight: l.weight, topics: l.topics, outlets: l.outlets, why: l.why ?? cur.why });
       cur.event_count = (cur.event_count ?? 0) + (l.event_count ?? 0);
       cur.verified_count = (cur.verified_count ?? 0) + (l.verified_count ?? 0);
       cur.wire_count = (cur.wire_count ?? 0) + (l.wire_count ?? 0);
@@ -337,7 +337,8 @@ const WebView = forwardRef<WebViewHandle, Props>(function WebView(
             linkCanvasObjectMode={() => 'replace'}
             linkHoverPrecision={8}
             linkLabel={(l: L) => {
-              const about = l.topics?.length ? l.topics.slice(0, 2).map(t => `${t.topic.replace('_', ' ')} ${t.count}`).join(', ') : l.label;
+              const about = l.why?.predicate ? `${l.why.predicate}${l.why.quote ? ` — “${l.why.quote.slice(0, 90)}${l.why.quote.length > 90 ? '…' : ''}”` : ''}`
+                : l.topics?.length ? l.topics.slice(0, 2).map(t => `${t.topic.replace('_', ' ')} ${t.count}`).join(', ') : l.label;
               const both = (l.hostile_n ?? 0) > 0 && (l.coop_n ?? 0) > 0 ? ` · ${l.coop_n} cooperative / ${l.hostile_n} hostile` : '';
               const v = l.origin === 'events' ? ` · ${l.verified_count ?? 0} verified · ${l.wire_count ?? 0} wire` : '';
               return `${about}${both}${v}${l.outlets?.length ? ` · ${l.outlets.slice(0, 3).join(', ')}` : ''}`;

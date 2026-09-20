@@ -3,6 +3,7 @@ import { Search } from 'lucide-react';
 import { KIND_HEX, RELATION_HEX } from '../../lib/symbology';
 import type { GraphNode } from '../../lib/types';
 import type { Partner } from './wheelLayout';
+import { modalityPrefix } from './modality';
 
 interface Props {
   partners: Partner[];
@@ -40,6 +41,12 @@ const PartnerList: React.FC<Props> = ({ partners, nodes, selectedId, hoverId, on
     p.links.forEach(l => l.topics?.forEach(t => { if (t.topic !== 'other') acc.set(t.topic, (acc.get(t.topic) ?? 0) + t.count); }));
     return [...acc.entries()].sort((a, b) => b[1] - a[1]).slice(0, 2).map(([t, n]) => `${t.replace('_', ' ')} ${n}`).join(' · ');
   };
+  /** The words of the strongest verified event, when the API has them. */
+  const why = (p: Partner): string | undefined => {
+    const l = p.links.find(x => x.why?.predicate);
+    if (!l?.why) return undefined;
+    return `${modalityPrefix(l.why.modality)}${l.why.predicate}${l.why.verdict === 'yes' ? '' : l.why.verdict ? ` (${l.why.verdict})` : ' (unchecked)'}`;
+  };
   const factLabel = (p: Partner) => p.links.filter(l => l.origin === 'wikidata').map(l => l.label).slice(0, 2).join(', ');
 
   return (
@@ -75,7 +82,9 @@ const PartnerList: React.FC<Props> = ({ partners, nodes, selectedId, hoverId, on
                 )}
               </div>
               <div className="text-[10px] text-text-3 truncate pl-3.5">
-                {p.events > 0 ? topics(p) || p.links.map(l => l.label).filter(Boolean).slice(0, 2).join(', ') : factLabel(p) || 'Wikidata fact'}
+                {p.events > 0
+                  ? (why(p) ?? topics(p) ?? p.links.map(l => l.label).filter(Boolean).slice(0, 2).join(', '))
+                  : factLabel(p) || 'Wikidata fact'}
               </div>
             </div>
           );

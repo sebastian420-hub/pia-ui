@@ -90,9 +90,16 @@ export interface EntitySummary {
 
 export interface TopicCount { topic: string; count: number }
 
+/** The words and the quote a connection rests on (its strongest verified event). */
+export interface Why {
+  predicate: string; quote: string | null; modality: string | null; verdict: 'yes' | 'partly' | 'no' | null;
+  outlet?: string | null; when?: string | null; outgoing?: boolean; actor_id?: string;
+}
+
 export interface RelationEntry {
   sources?: string[];
   actions?: string[];
+  why?: Why | null;
   topics?: TopicCount[];
   verified_topics?: TopicCount[];
   verified_count?: number;   // events an article said (origin llm, with a quote)
@@ -114,6 +121,10 @@ export interface EntityCard extends EntitySummary {
   aliases: { alias: string; source: string }[];
   trend: { last_7d: number; prev_7d: number } | null;
   relations: Partial<Record<RelationKind, RelationEntry[]>>;
+  brief?: { text: string; generated_at: string } | null;
+  timeline?: { event_id: string; event_time: string; kind: string | null; stance: number | null; modality: string | null;
+               verifier_verdict: string | null; predicate: string; actor: string; target: string | null; quote: string | null;
+               source_id: string | null; origin: string }[];
   event_counts: Record<string, number>;
   recent_reports: { report_uid: string; role: string; surface: string; content_headline: string; created_at: string; source_id: string; priority: string }[];
   wikidata_url: string | null;
@@ -129,6 +140,12 @@ export interface KgEvent {
   code?: string | null;
   coded_as?: string | null;
   outlets?: string[] | null;
+  predicate?: string | null;
+  stance?: number | null;
+  modality?: string | null;
+  polarity?: boolean | null;
+  verifier_verdict?: 'yes' | 'partly' | 'no' | null;
+  verifier_note?: string | null;
   confidence: number;
   tone: number | null;
   quote: string | null;
@@ -209,6 +226,7 @@ export interface GraphLink {
   verified_topics?: TopicCount[];
   verified_count?: number;
   wire_count?: number;
+  why?: Why | null;
   first_seen?: string | null;
   last_seen?: string | null;
   reasoning?: string | null;

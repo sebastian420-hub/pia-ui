@@ -3,6 +3,8 @@ import { X, ExternalLink, ArrowRight } from 'lucide-react';
 import { apiFetch } from '../../lib/api';
 import { zuluDateTime, zuluShort } from '../../lib/format';
 import { RELATION_HEX } from '../../lib/symbology';
+import { VerdictBadge } from '../web/verdict';
+import { modalityPrefix } from '../web/modality';
 import type { RelationEvidence } from '../../lib/types';
 
 type EvEvent = RelationEvidence['events'][number];
@@ -72,9 +74,17 @@ const EvidencePanel: React.FC<Props> = ({ a, b, onClose, onOpenEntity }) => {
                 <div key={e.event_id} className="border border-line rounded px-2 py-1.5">
                   <div className="flex items-center justify-between text-[10px] text-text-3">
                     <span>{zuluShort(e.event_time)} · {e.source_id ?? e.origin}{e.topic && e.topic !== 'other' ? ` · ${e.topic.replace('_', ' ')}` : ''}</span>
-                    <span className={e.tone != null && e.tone < 0 ? 'text-prio-high' : 'text-ok'}>{e.action.toLowerCase().replace('_', ' ')}</span>
+                    <span className={(e.stance ?? e.tone ?? 0) < 0 ? 'text-prio-high' : (e.stance ?? e.tone ?? 0) > 0 ? 'text-ok' : 'text-text-2'}>
+                      {e.stance != null ? `stance ${e.stance > 0 ? '+' : ''}${e.stance}` : e.action.toLowerCase().replace('_', ' ')}
+                    </span>
                   </div>
-                  <div className="text-text-2 flex items-center gap-1">{e.actor} <ArrowRight size={10} className="text-text-3" /> {e.target}</div>
+                  <div className="text-text-2 flex items-center gap-1 flex-wrap">
+                    {e.actor} <ArrowRight size={10} className="text-text-3" />
+                    {e.predicate && <span className="text-text-1">{modalityPrefix(e.modality)}{e.polarity === false ? 'NOT ' : ''}{e.predicate}</span>}
+                    <ArrowRight size={10} className="text-text-3" /> {e.target}
+                    {e.origin !== 'gdelt' && <VerdictBadge verdict={e.verifier_verdict} />}
+                  </div>
+                  {e.verifier_note && e.verifier_verdict !== 'yes' && <div className="text-[10px] text-warn">check: {e.verifier_note}</div>}
                   {e.quote && <div className="text-text-3 italic text-[11px] mt-0.5">“{e.quote}”</div>}
                   {/* GDELT events carry no quote: the evidence is the headline, the outlet and the CAMEO code */}
                   {!e.quote && e.content_headline && !/ — .* — /.test(e.content_headline) && <div className="text-text-2 text-[11px] mt-0.5">{e.content_headline}</div>}
