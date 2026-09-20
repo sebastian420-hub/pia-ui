@@ -4,6 +4,7 @@ import { ArrowLeft, Check, X, GitMerge } from 'lucide-react';
 import { apiFetch, apiJson } from '../lib/api';
 import { KIND_HEX } from '../lib/symbology';
 import type { ReviewItem } from '../lib/types';
+import VerbsTab from '../components/web/VerbsTab';
 
 /** Names the resolver was not sure about. One click: merge into a Wikidata item, keep local, or reject. */
 const Review: React.FC = () => {
@@ -11,6 +12,7 @@ const Review: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [custom, setCustom] = useState<Record<string, string>>({});
   const [total, setTotal] = useState<number | null>(null);
+  const [tab, setTab] = useState<'names' | 'verbs'>('names');
 
   const load = useCallback(() => {
     apiFetch<ReviewItem[]>('/api/v1/kg/review?limit=100').then(r => {
@@ -30,10 +32,17 @@ const Review: React.FC = () => {
     <div className="h-screen w-screen bg-bg-0 text-text-1 font-mono text-[12px] flex flex-col">
       <div className="h-10 flex items-center gap-3 px-4 border-b border-line bg-bg-1">
         <Link to="/" className="text-text-3 hover:text-text-1"><ArrowLeft size={16} /></Link>
-        <span className="tracking-[0.2em] text-text-1">IDENTITY REVIEW</span>
-        <span className="text-text-3">· {total ?? items.length} names waiting{total && total > items.length ? ` · showing ${items.length}` : ''}</span>
+        <span className="tracking-[0.2em] text-text-1">REVIEW</span>
+        <button onClick={() => setTab('names')} className={`px-2 py-0.5 rounded border ${tab === 'names' ? 'border-line bg-bg-3 text-text-1' : 'border-transparent text-text-3'}`}>
+          names · {total ?? items.length}
+        </button>
+        <button onClick={() => setTab('verbs')} className={`px-2 py-0.5 rounded border ${tab === 'verbs' ? 'border-line bg-bg-3 text-text-1' : 'border-transparent text-text-3'}`}>
+          verbs
+        </button>
+        {tab === 'names' && total && total > items.length && <span className="text-text-3">· showing {items.length}</span>}
       </div>
-      <div className="flex-1 overflow-y-auto p-4 space-y-2 max-w-5xl">
+      {tab === 'verbs' && <div className="flex-1 overflow-y-auto"><VerbsTab /></div>}
+      <div className={`flex-1 overflow-y-auto p-4 space-y-2 max-w-5xl ${tab === 'verbs' ? 'hidden' : ''}`}>
         {loading && <div className="text-text-3">Loading…</div>}
         {!loading && items.length === 0 && <div className="text-text-3">Nothing to review. The resolver is confident about everything it has seen.</div>}
         {items.map(it => (
