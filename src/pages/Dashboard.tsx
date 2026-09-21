@@ -404,7 +404,10 @@ function Dashboard() {
                 onClose={() => setMissionEditor({ open: false, mission: null })} />
             </div>
           )}
-          {showCopilot && <div className="absolute bottom-3 right-3 z-20"><AICopilot onClose={() => setShowCopilot(false)} /></div>}
+          {showCopilot && <div className="absolute bottom-3 right-3 z-20">
+            <AICopilot onClose={() => setShowCopilot(false)} onOpenEntity={selectEntity} onOpenReport={openReportByUid} onOpenEvidence={selectEvidence}
+              suggestions={missionsApi.narrowing && missionsApi.active ? [`Anything new in ${missionsApi.active.name}?`, ...(missionsApi.active.watchlist_names ?? []).slice(0, 2).map(n => `What did ${n} do this week?`)] : undefined} />
+          </div>}
           {activeGraphEntity && (
             <WebView ref={webRef} entityKey={activeGraphEntity} selectedId={selection?.kind === 'entity' ? selection.key : null}
               onClose={() => { setActiveGraphEntity(null); setWebRootId(null); }}
