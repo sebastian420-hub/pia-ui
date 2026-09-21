@@ -190,6 +190,10 @@ const EntityInspector: React.FC<Props> = ({ entityKey, onClose, onOpenEntity, on
                               <div className="text-[10px] text-text-3 truncate">
                                 <span className="text-text-2">{r.label}</span> · {r.via_source ?? 'registry'}{r.first_seen ? ` · ${r.first_seen.slice(0, 10)}` : ''}{r.last_seen ? ` → ${r.last_seen.slice(0, 10)}` : ''}
                                 {r.properties && typeof r.properties.reason === 'string' && r.properties.reason ? ` · ${(r.properties.reason as string).slice(0, 80)}` : ''}
+                                {r.record_ref && /^https?:\/\//.test(r.record_ref) && (
+                                  <a href={r.record_ref} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}
+                                    className="ml-1 text-accent hover:underline" title={r.record_ref}>source ↗</a>
+                                )}
                               </div>
                             ) : (
                               <div className="text-[10px] text-text-3 truncate">{relationSentence(r)}</div>
