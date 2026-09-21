@@ -111,6 +111,7 @@ export interface RelationEntry {
   verified_topics?: TopicCount[];
   verified_count?: number;   // events an article said (origin llm, with a quote)
   wire_count?: number;       // GDELT story-days behind the pair
+  restricted_count?: number; // events from restricted sources this user is granted — shown on top, never in the line
   entity_id: string;
   qid: string | null;
   name: string;

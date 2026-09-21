@@ -26,7 +26,8 @@ function App() {
   }, []);
 
   const signOut = useCallback(() => { clearToken(); setMe(null); }, []);
-  const session = useMemo(() => ({ me, can: (role: Role) => atLeast(me, role), signOut }), [me, signOut]);
+  const session = useMemo(() => ({ me, can: (role: Role) => atLeast(me, role), signOut,
+    isRestricted: (id?: string | null) => !!id && !!me?.visible_restricted?.includes(id) }), [me, signOut]);
 
   if (!checked) return null;
   if (!me) return <SignIn onSignedIn={setMe} />;

@@ -3,7 +3,8 @@ import { X, ExternalLink, ArrowRight } from 'lucide-react';
 import { apiFetch } from '../../lib/api';
 import { zuluDateTime, zuluShort } from '../../lib/format';
 import { RELATION_HEX } from '../../lib/symbology';
-import { VerdictBadge } from '../web/verdict';
+import { RestrictedBadge, VerdictBadge } from '../web/verdict';
+import { useSession } from '../../lib/session';
 import { modalityPrefix } from '../web/modality';
 import type { RelationEvidence } from '../../lib/types';
 
@@ -18,6 +19,7 @@ interface Props {
 
 /** Why two entities are connected: relations, the events with their quotes, shared reports. */
 const EvidencePanel: React.FC<Props> = ({ a, b, onClose, onOpenEntity }) => {
+  const { isRestricted } = useSession();
   const [ev, setEv] = useState<RelationEvidence | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -73,7 +75,7 @@ const EvidencePanel: React.FC<Props> = ({ a, b, onClose, onOpenEntity }) => {
               {(list as EvEvent[]).map(e => (
                 <div key={e.event_id} className="border border-line rounded px-2 py-1.5">
                   <div className="flex items-center justify-between text-[10px] text-text-3">
-                    <span>{zuluShort(e.event_time)} · {e.source_id ?? e.origin}{e.topic && e.topic !== 'other' ? ` · ${e.topic.replace('_', ' ')}` : ''}</span>
+                    <span>{zuluShort(e.event_time)} · {e.source_id ?? e.origin}{e.topic && e.topic !== 'other' ? ` · ${e.topic.replace('_', ' ')}` : ''}{isRestricted(e.source_id) && <RestrictedBadge />}</span>
                     <span className={(e.stance ?? e.tone ?? 0) < 0 ? 'text-prio-high' : (e.stance ?? e.tone ?? 0) > 0 ? 'text-ok' : 'text-text-2'}>
                       {e.stance != null ? `stance ${e.stance > 0 ? '+' : ''}${e.stance}` : e.action.toLowerCase().replace('_', ' ')}
                     </span>

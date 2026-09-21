@@ -62,6 +62,11 @@ const Admin: React.FC = () => {
     const r = await apiJson(`/api/v1/sources/${encodeURIComponent(s.source_id)}/grants`, { user_id: userId });
     if (r.status === 'success') load(); else say(r.message || 'failed');
   };
+  const deleteSource = async (s: SourceRow) => {
+    if (!window.confirm(`Delete source "${s.label}" and everything it said (${s.reports} reports, ${s.events} events, its facts, aliases, ids, listings)? This cannot be undone.`)) return;
+    const r = await apiFetch<Record<string, number>>(`/api/v1/sources/${encodeURIComponent(s.source_id)}`, { method: 'DELETE' });
+    if (r.status === 'success') { say(`deleted: ${JSON.stringify(r.data)}`); load(); } else say(r.message || 'failed');
+  };
   const revokeGrant = async (s: SourceRow, name: string) => {
     const u = users.find(x => x.name === name);
     if (!u) return;
@@ -135,7 +140,7 @@ const Admin: React.FC = () => {
           <div className="max-w-5xl">
             <p className="text-text-3 mb-2">A row is as visible as its source. <b>public</b> — everyone · <b>org</b> — any signed-in user · <b>restricted</b> — only the users granted below (and admins).</p>
             <table className="w-full text-left">
-              <thead className="text-text-3 text-[10px] tracking-widest"><tr><th className="py-1">SOURCE</th><th>KIND</th><th>TRUST</th><th>ROWS</th><th>VISIBILITY</th><th>GRANTED TO</th></tr></thead>
+              <thead className="text-text-3 text-[10px] tracking-widest"><tr><th className="py-1">SOURCE</th><th>KIND</th><th>TRUST</th><th>ROWS</th><th>VISIBILITY</th><th>GRANTED TO</th><th></th></tr></thead>
               <tbody>
                 {sources.map(s => (
                   <tr key={s.source_id} className={`border-t border-line ${s.visibility === 'restricted' ? 'bg-prio-critical/5' : ''}`}>
@@ -158,6 +163,11 @@ const Admin: React.FC = () => {
                           </select>
                         </span>
                       ) : <span className="text-text-3">—</span>}
+                    </td>
+                    <td className="text-right">
+                      {!['gdelt', 'wikidata', 'pia'].includes(s.source_id) && (
+                        <button onClick={() => deleteSource(s)} className="px-2 py-0.5 rounded border border-line text-text-3 hover:text-err hover:border-err" title="Delete this source and everything it said">delete</button>
+                      )}
                     </td>
                   </tr>
                 ))}

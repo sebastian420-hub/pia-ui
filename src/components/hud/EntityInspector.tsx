@@ -3,7 +3,7 @@ import { X, ExternalLink, Globe, Share2, TrendingUp, TrendingDown, Plus, Crossha
 import { apiFetch } from '../../lib/api';
 import { zuluDateTime, zuluShort } from '../../lib/format';
 import { KIND_HEX, RELATION_HEX } from '../../lib/symbology';
-import { VerdictBadge } from '../web/verdict';
+import { RestrictedBadge, VerdictBadge } from '../web/verdict';
 import { modalityPrefix } from '../web/modality';
 import type { EntityCard, KgEvent, RelationKind } from '../../lib/types';
 
@@ -183,6 +183,7 @@ const EntityInspector: React.FC<Props> = ({ entityKey, onClose, onOpenEntity, on
                                   <VerdictBadge verdict={r.why.verdict} />
                                   {(r.verified_count ?? 0) > 1 && <span className="text-text-3"> · {r.verified_count} verified</span>}
                                   {(r.wire_count ?? 0) > 0 && <span className="text-text-3"> · {r.wire_count} wire</span>}
+                                  {(r.restricted_count ?? 0) > 0 && <RestrictedBadge count={r.restricted_count} />}
                                 </div>
                                 {r.why.quote && <div className="text-[10px] text-text-3 italic truncate">“{r.why.quote}”</div>}
                               </>

@@ -9,3 +9,10 @@ export const VerdictBadge: React.FC<{ verdict?: string | null }> = ({ verdict })
   return <span className="ml-1 text-[9px] px-1 rounded bg-bg-3 text-text-3 align-middle" title="not yet checked">unchecked</span>;
 };
 
+
+/** A row that comes from a restricted source this user is granted: visible to few, never part of the shared lines. */
+export const RestrictedBadge: React.FC<{ count?: number }> = ({ count }) => (
+  <span className="ml-1 text-[9px] px-1 rounded bg-prio-critical/20 text-prio-critical align-middle" title="from a restricted source you are granted — not part of the shared picture">
+    restricted{count && count > 1 ? ` ×${count}` : ''}
+  </span>
+);
