@@ -1,10 +1,18 @@
 /**
  * Single place for the API base URL and the bearer token.
- * Configure via .env: VITE_API_URL, VITE_API_TOKEN (see .env.example).
+ * Configure the URL via .env (VITE_API_URL); the token is the signed-in user's, never built in.
  */
 export const API_BASE = (import.meta.env.VITE_API_URL ?? 'http://localhost:8001').replace(/\/$/, '');
-export const API_TOKEN: string = import.meta.env.VITE_API_TOKEN ?? '';
 export const WS_BASE = API_BASE.replace(/^http/, 'ws');
+
+const TOKEN_KEY = 'pia_token';
+
+/** The signed-in user's token: pasted on the sign-in screen, kept in this browser only. */
+export function getToken(): string {
+  try { return localStorage.getItem(TOKEN_KEY) ?? ''; } catch { return ''; }
+}
+export function setToken(t: string) { try { localStorage.setItem(TOKEN_KEY, t.trim()); } catch { /* private window */ } }
+export function clearToken() { try { localStorage.removeItem(TOKEN_KEY); } catch { /* ignore */ } }
 
 export interface ApiEnvelope<T> {
   status: 'success' | 'error';
@@ -13,17 +21,20 @@ export interface ApiEnvelope<T> {
   reply?: string;
   pagination?: { page: number; limit: number; total: number; total_pages: number };
   total?: number;
+  code?: number;
 }
 
 /** fetch() with the Authorization header; never throws on HTTP errors, returns the envelope. */
 export async function apiFetch<T = unknown>(path: string, init: RequestInit = {}): Promise<ApiEnvelope<T>> {
   const headers = new Headers(init.headers);
-  if (API_TOKEN) headers.set('Authorization', `Bearer ${API_TOKEN}`);
+  const token = getToken();
+  if (token) headers.set('Authorization', `Bearer ${token}`);
   try {
     const res = await fetch(`${API_BASE}${path}`, { ...init, headers });
     const body = (await res.json().catch(() => ({}))) as Partial<ApiEnvelope<T>>;
     if (body.status === 'success') return body as ApiEnvelope<T>;
-    return { status: 'error', message: body.message ?? `HTTP ${res.status}` };
+    if (res.status === 401) window.dispatchEvent(new Event('pia:unauthorized'));
+    return { status: 'error', message: body.message ?? `HTTP ${res.status}`, code: res.status };
   } catch (err) {
     return { status: 'error', message: err instanceof Error ? err.message : 'Network error' };
   }
@@ -37,10 +48,10 @@ export function apiJson<T = unknown>(path: string, payload: unknown, method = 'P
 export function mediaUrl(path: string, bust?: number | string): string {
   const sep = path.includes('?') ? '&' : '?';
   const t = bust != null ? `&t=${bust}` : '';
-  return `${API_BASE}${path}${sep}token=${encodeURIComponent(API_TOKEN)}${t}`;
+  return `${API_BASE}${path}${sep}token=${encodeURIComponent(getToken())}${t}`;
 }
 
 /** URL for the live WebSocket, token passed on the handshake. */
 export function liveSocketUrl(): string {
-  return `${WS_BASE}/ws/live?token=${encodeURIComponent(API_TOKEN)}`;
+  return `${WS_BASE}/ws/live?token=${encodeURIComponent(getToken())}`;
 }

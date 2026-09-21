@@ -10,7 +10,7 @@ interface Props {
   scope: MissionScope;
   onScope: (s: MissionScope) => void;
   onActivate: (id: string) => void;
-  onEdit: (m: Mission | null) => void;   // null = new
+  onEdit?: (m: Mission | null) => void;  // null = new; absent for viewers
 }
 
 /** `MISSION ▾` in the status bar: pick the active mission, show all / mission only, new, edit. */
@@ -46,12 +46,12 @@ const MissionSwitcher: React.FC<Props> = ({ missions, active, scope, onScope, on
                     {m.is_general ? 'everything' : `${m.events ?? 0} ev · ${m.alerts ?? 0} alerts`}
                   </span>
                 </button>
-                <button onClick={() => { onEdit(m); setOpen(false); }} className="text-text-3 hover:text-text-1" title="Edit"><Pencil size={11} /></button>
+                {onEdit && <button onClick={() => { onEdit(m); setOpen(false); }} className="text-text-3 hover:text-text-1" title="Edit"><Pencil size={11} /></button>}
               </li>
             ))}
           </ul>
           <div className="border-t border-line px-2 py-1.5 flex items-center gap-2">
-            <button onClick={() => { onEdit(null); setOpen(false); }} className="flex items-center gap-1 text-text-2 hover:text-text-1"><Plus size={12} /> new mission</button>
+            {onEdit && <button onClick={() => { onEdit(null); setOpen(false); }} className="flex items-center gap-1 text-text-2 hover:text-text-1"><Plus size={12} /> new mission</button>}
             {narrow && (
               <label className="ml-auto flex items-center gap-1 text-text-3 cursor-pointer" title="Show everything, not only what matters to this mission">
                 <input type="checkbox" checked={scope === 'all'} onChange={e => onScope(e.target.checked ? 'all' : 'mission')} /> show all

@@ -29,6 +29,7 @@ import DocumentUploader from '../components/hud/DocumentUploader';
 import MissionSwitcher from '../components/mission/MissionSwitcher';
 import MissionEditor from '../components/mission/MissionEditor';
 import { useMissions } from '../lib/missions';
+import { useSession } from '../lib/session';
 import type { Mission } from '../lib/types';
 import type { IntelligenceEvent, ClusterRow, ArchiveRecord, LayerCount, Sensor, Selection, KgEvent, EntitySummary, WebOverview, WebWindow } from '../lib/types';
 import { apiFetch, liveSocketUrl } from '../lib/api';
@@ -69,6 +70,7 @@ function Dashboard() {
   const [showCopilot, setShowCopilot] = useState(false);
   const [showUpload, setShowUpload] = useState(false);
   const [liveActive, setLiveActive] = useState(false);
+  const { can } = useSession();
   const missionsApi = useMissions();
   const mq = missionsApi.query;                                   // '' or '&mission_id=…' — every data request carries it
   const [missionEditor, setMissionEditor] = useState<{ open: boolean; mission: Mission | null }>({ open: false, mission: null });
@@ -323,7 +325,7 @@ function Dashboard() {
     <div className="h-screen w-screen bg-bg-0 text-text-1 flex flex-col overflow-hidden">
       <StatusBar feedStatus={feedStatus} alertCount={alertCount} onLiveChange={setLiveActive}
         mission={<MissionSwitcher missions={missionsApi.missions} active={missionsApi.active} scope={missionsApi.scope} onScope={missionsApi.setScope}
-                   onActivate={missionsApi.activate} onEdit={(m) => setMissionEditor({ open: true, mission: m })} />} />
+                   onActivate={missionsApi.activate} onEdit={can('analyst') ? (m) => setMissionEditor({ open: true, mission: m }) : undefined} />} />
 
       {/* Tool row: domain filter · entity search · actions. Fixed slot, never over the globe. */}
       <div className="h-9 flex items-center gap-3 px-3 bg-bg-1 border-b border-line">
@@ -352,12 +354,12 @@ function Dashboard() {
               </ul>
             )}
           </form>
-          <button onClick={() => setShowUpload(v => !v)} title="Upload document"
-            className={`p-1.5 rounded border ${showUpload ? 'border-accent text-text-1' : 'border-line text-text-2 hover:text-text-1'}`}><Upload size={14} /></button>
+          {can('analyst') && <button onClick={() => setShowUpload(v => !v)} title="Upload document"
+            className={`p-1.5 rounded border ${showUpload ? 'border-accent text-text-1' : 'border-line text-text-2 hover:text-text-1'}`}><Upload size={14} /></button>}
           <button onClick={() => setShowCopilot(v => !v)} title="Ask the assistant"
             className={`p-1.5 rounded border ${showCopilot ? 'border-accent text-text-1' : 'border-line text-text-2 hover:text-text-1'}`}><MessageSquare size={14} /></button>
           <a href="/archive" className="px-2 py-1 rounded border border-line font-mono text-[11px] text-text-2 hover:text-text-1 tracking-widest">ARCHIVE</a>
-          <a href="/review" className="px-2 py-1 rounded border border-line font-mono text-[11px] text-text-2 hover:text-text-1 tracking-widest" title="Names the resolver was not sure about">REVIEW</a>
+          {can('analyst') && <a href="/review" className="px-2 py-1 rounded border border-line font-mono text-[11px] text-text-2 hover:text-text-1 tracking-widest" title="Names the resolver was not sure about">REVIEW</a>}
         </div>
       </div>
 

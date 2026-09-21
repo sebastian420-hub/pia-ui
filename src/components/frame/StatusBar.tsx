@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { Radio, Activity } from 'lucide-react';
+import { Radio, Activity, LogOut } from 'lucide-react';
+import { useSession } from '../../lib/session';
 import { apiFetch, apiJson } from '../../lib/api';
 import { countdown, zuluTime, ago } from '../../lib/format';
 import type { Health, LiveStatus } from '../../lib/types';
@@ -18,6 +19,7 @@ const StatusBar: React.FC<StatusBarProps> = ({ feedStatus, alertCount, onLiveCha
   const [live, setLive] = useState<LiveStatus | null>(null);
   const [busy, setBusy] = useState(false);
   const [tick, setTick] = useState(0);
+  const { me, signOut, can } = useSession();
 
   useEffect(() => {
     const t = setInterval(() => { setClock(zuluTime()); setTick(x => x + 1); }, 1000);
@@ -81,6 +83,11 @@ const StatusBar: React.FC<StatusBarProps> = ({ feedStatus, alertCount, onLiveCha
           {live?.active && live.session ? `LIVE ${countdown(live.session.expires_at)} · $${live.estimated_cost_today_usd.toFixed(2)}` : 'GO LIVE'}
         </button>
 
+        <span className="flex items-center gap-1" title={`signed in as ${me?.name} (${me?.role})`}>
+          {can('admin') ? <a href="/admin" className="text-text-2 hover:text-text-1">{me?.name}</a> : <span className="text-text-2">{me?.name}</span>}
+          <span className="text-text-3">· {me?.role}</span>
+          <button onClick={signOut} title="Sign out" className="text-text-3 hover:text-text-1"><LogOut size={12} /></button>
+        </span>
         <span className="text-text-1 tabular-nums text-[13px] w-[84px] text-right">{clock}</span>
       </span>
     </div>
